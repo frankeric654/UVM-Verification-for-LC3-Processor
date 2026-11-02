@@ -15,8 +15,11 @@ with observations. Final simulation runs at the complete LC3 level, as required
 by assignment slides 7–9. Although the team splits work among five people, the
 assignment requires six stage sub-environments, including Decode.
 
-Only the initial input/output transfer types and this interface contract exist
-so far. This is not yet a runnable UVM environment. No SystemVerilog compilation
+The input/output transfer types and passive input interface exist so far.
+The input interface exposes the WB signals as input wire ports; a future monitor
+BFM will sample them. Port directions are relative to this interface: memout is
+an input even though it is an output of MemAccess. No sampling logic is present
+yet. This is not yet a runnable UVM environment. No SystemVerilog compilation
 or LC3 simulation has been performed for this contribution.
 
 ## Local layout
@@ -109,5 +112,5 @@ sampling/cycle convention, and ownership of LC3 integration and imem/dmem.
 ## Validation to date
 
 The assignment, design specification, supplied RTL top-level port map, and P2
-model were reviewed. Source types and documentation are the only implemented
-artifacts; compilation, simulation, and coverage results are still pending.
+model were reviewed. Source types, the input interface, and documentation are
+implemented; compilation, simulation, and coverage results are still pending.

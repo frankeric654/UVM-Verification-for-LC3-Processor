@@ -28,7 +28,10 @@ predictor 算預期結果，scoreboard 比較預期與實際結果。
 6. 建 environment，連接 analysis ports，接入組員的 LC3 bench。
 7. 在 LC3 level 執行測試，記錄 bug、coverage、transcript，再提交。
 
-目前只有第一步的型別與介面約定，還不是可執行的 UVM environment。
+目前已建立 input/output 型別及 `writeback_in_if.sv`，還不是可執行的 UVM environment。
+input interface 的所有 port 都是 `input wire`，由 LC3 bench 接入訊號。
+方向以此 interface 為準，因此 MemAccess 的 output `memout` 在這裡是 input。
+interface 目前只提供訊號連線，尚未加入 monitor BFM 或取樣邏輯。
 
 ## WB 訊號對照
 
@@ -97,4 +100,4 @@ VSR1/VSR2 為非同步讀取，即使 writeback disable 仍要檢查讀取。
 ## 本次驗證範圍
 
 核對 assignment、design spec、提供的 RTL top-level port map 及 P2 model。
-本次只建立型別定義；尚未執行 SystemVerilog 編譯或 LC3 simulation。
+目前已建立型別定義與 input interface；尚未執行 SystemVerilog 編譯或 LC3 simulation。
