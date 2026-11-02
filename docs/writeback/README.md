@@ -16,10 +16,11 @@ by assignment slides 7–9. Although the team splits work among five people, the
 assignment requires six stage sub-environments, including Decode.
 
 The input/output transfer types and passive input interface exist so far.
-The input interface exposes the WB signals as input wire ports; a future monitor
-BFM will sample them. Port directions are relative to this interface: memout is
-an input even though it is an output of MemAccess. No sampling logic is present
-yet. This is not yet a runnable UVM environment. No SystemVerilog compilation
+The input interface exposes the WB signals as input wire ports. Its
+`monitor_cb` clocking block samples all input fields using `input #1step`
+at each positive clock edge, with a local time unit of 1ns and precision of 1ps.
+A future monitor BFM will read these sampled values. Port directions are relative to this interface: memout is
+an input even though it is an output of MemAccess. The monitor BFM is not implemented yet. This is not yet a runnable UVM environment. No SystemVerilog compilation
 or LC3 simulation has been performed for this contribution.
 
 ## Local layout
@@ -113,4 +114,7 @@ sampling/cycle convention, and ownership of LC3 integration and imem/dmem.
 
 The assignment, design specification, supplied RTL top-level port map, and P2
 model were reviewed. Source types, the input interface, and documentation are
-implemented; compilation, simulation, and coverage results are still pending.
+implemented. Verilator lint could not run because its installed standard-library
+file is missing; a Questa compile attempt also failed in this environment
+(exit 159, without compiler diagnostics). Compilation is therefore unverified;
+simulation and coverage results are still pending.

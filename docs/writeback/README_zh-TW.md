@@ -31,7 +31,8 @@ predictor 算預期結果，scoreboard 比較預期與實際結果。
 目前已建立 input/output 型別及 `writeback_in_if.sv`，還不是可執行的 UVM environment。
 input interface 的所有 port 都是 `input wire`，由 LC3 bench 接入訊號。
 方向以此 interface 為準，因此 MemAccess 的 output `memout` 在這裡是 input。
-interface 目前只提供訊號連線，尚未加入 monitor BFM 或取樣邏輯。
+interface 已加入 `monitor_cb`，以 `input #1step` 定義上升緣前的取樣值；
+本地 timeunit 為 1ns、timeprecision 為 1ps。尚未實作讀取這些值的 monitor BFM。
 
 ## WB 訊號對照
 
@@ -100,4 +101,6 @@ VSR1/VSR2 為非同步讀取，即使 writeback disable 仍要檢查讀取。
 ## 本次驗證範圍
 
 核對 assignment、design spec、提供的 RTL top-level port map 及 P2 model。
-目前已建立型別定義與 input interface；尚未執行 SystemVerilog 編譯或 LC3 simulation。
+目前已建立型別定義與 input interface 的 clocking block。Verilator 因安裝缺少
+標準函式庫檔案而無法 lint；Questa 編譯嘗試也在環境中以 exit 159 結束，沒有
+編譯器診斷。因此尚未確認編譯成功，也尚未執行 LC3 simulation。

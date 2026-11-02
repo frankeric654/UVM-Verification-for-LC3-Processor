@@ -12,4 +12,21 @@ interface writeback_in_if (
   input wire [2:0]  sr2,
   input wire [2:0]  dr
 );
+  timeunit 1ns;
+  timeprecision 1ps;
+
+  // Observe the inputs used by WB at this edge, before Execute's NBA updates.
+  clocking monitor_cb @(posedge clock);
+    default input #1step;
+    input reset;
+    input enable_writeback;
+    input W_Control;
+    input aluout;
+    input memout;
+    input pcout;
+    input npc;
+    input sr1;
+    input sr2;
+    input dr;
+  endclocking
 endinterface
