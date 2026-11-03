@@ -22,6 +22,7 @@ waits for that event and copies all sampled fields into an output transfer struc
 Each call observes one edge, including reset and write-disabled cycles; it does
 not drive the DUT or publish through a UVM analysis port. The UVM monitor class,
 output observation, predictor, and scoreboard are still to be implemented.
+The input transaction and its UVM package wrapper are now implemented.
 
 The input types, interface, and BFM compile with Questa 2024.2 (zero errors and
 warnings). This is not yet a runnable UVM environment; no LC3 simulation or
@@ -129,3 +130,23 @@ outside the source tree. This supersedes the earlier unsuccessful compile
 attempt; compilation succeeded when the installed compiler ran outside the
 restricted execution sandbox. Simulation, timing validation, and coverage remain
 pending.
+
+## Input transaction
+
+`writeback_in_transaction.svh` extends `uvm_sequence_item` and contains a
+`writeback_in_transfer_t sample`. The factory/field macros register the class
+and its packed payload for UVM object operations. Its constructor forwards the
+object name to the base class. Allocate a new transaction per observed sample;
+assigning class handles does not create an independent object.
+
+`writeback_in_pkg.sv` imports UVM and the transfer types, then includes the class.
+Compile this package rather than compiling the `.svh` separately. Add the `src`
+directory to the include path. Questa 2024.2 with UVM 1.2 compiled the package
+with zero errors/warnings on November 3, 2026. Use matching UVM library and
+headers: `-L <questa-install>/uvm-1.2` and
+`+incdir+<questa-install>/verilog_src/uvm-1.2/src`, plus
+`+incdir+verification_ip/interface_packages/writeback_in_pkg/src`.
+Compile the types package before `writeback_in_pkg.sv`. Questa's default mtiUvm
+library in this installation is UVM 1.1d and cannot be mixed with 1.2 headers.
+This check confirms compilation only; transaction behavior and LC3 simulation
+remain unverified.

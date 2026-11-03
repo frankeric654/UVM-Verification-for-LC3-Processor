@@ -113,3 +113,19 @@ monitor BFM，結果為零 error、零 warning。編譯庫放在 `/tmp`，未加
 1. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_types_pkg.sv`
 2. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_if.sv`
 3. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_monitor_bfm.sv`
+
+## Input transaction
+
+已新增 `writeback_in_transaction.svh`，繼承 `uvm_sequence_item`，內含
+`writeback_in_transfer_t sample`。Factory/field macros 註冊類別與 packed
+payload；constructor 將物件名稱傳給父類別。每筆取樣都要建立新的 transaction，
+因為複製 class handle 不會建立獨立物件。
+
+`writeback_in_pkg.sv` 匯入 UVM 與 types 後 include 此 class；編譯 package，
+不要另外編譯 `.svh`。先編譯 types package，再編譯此 UVM package，並將 `src`
+加入 include path。2026-11-03 使用 Questa 2024.2、UVM 1.2 編譯通過，零 error/warning。
+使用 `-L <questa-install>/uvm-1.2`、
+`+incdir+<questa-install>/verilog_src/uvm-1.2/src`，及
+`+incdir+verification_ip/interface_packages/writeback_in_pkg/src`。
+本機預設 mtiUvm 是 UVM 1.1d，不能搭配 1.2 header；library 與 header 必須一致。
+本次僅確認編譯，尚未驗證 transaction 執行行為或 LC3 simulation。
