@@ -15,13 +15,17 @@ with observations. Final simulation runs at the complete LC3 level, as required
 by assignment slides 7–9. Although the team splits work among five people, the
 assignment requires six stage sub-environments, including Decode.
 
-The input/output transfer types and passive input interface exist so far.
-The input interface exposes the WB signals as input wire ports. Its
-`monitor_cb` clocking block samples all input fields using `input #1step`
-at each positive clock edge, with a local time unit of 1ns and precision of 1ps.
-A future monitor BFM will read these sampled values. Port directions are relative to this interface: memout is
-an input even though it is an output of MemAccess. The monitor BFM is not implemented yet. This is not yet a runnable UVM environment. No SystemVerilog compilation
-or LC3 simulation has been performed for this contribution.
+The input/output transfer types, passive input interface, and input monitor BFM
+are implemented. The interface's `monitor_cb` samples input fields using
+`input #1step` at each positive clock edge. The BFM's automatic `monitor` task
+waits for that event and copies all sampled fields into an output transfer struct.
+Each call observes one edge, including reset and write-disabled cycles; it does
+not drive the DUT or publish through a UVM analysis port. The UVM monitor class,
+output observation, predictor, and scoreboard are still to be implemented.
+
+The input types, interface, and BFM compile with Questa 2024.2 (zero errors and
+warnings). This is not yet a runnable UVM environment; no LC3 simulation or
+sampling behavior validation has been performed.
 
 ## Local layout
 
@@ -112,9 +116,16 @@ sampling/cycle convention, and ownership of LC3 integration and imem/dmem.
 
 ## Validation to date
 
-The assignment, design specification, supplied RTL top-level port map, and P2
-model were reviewed. Source types, the input interface, and documentation are
-implemented. Verilator lint could not run because its installed standard-library
-file is missing; a Questa compile attempt also failed in this environment
-(exit 159, without compiler diagnostics). Compilation is therefore unverified;
-simulation and coverage results are still pending.
+On November 3, 2026, Questa 2024.2 compiled these files in order with zero errors
+and zero warnings:
+
+1. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_types_pkg.sv`
+2. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_if.sv`
+3. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_monitor_bfm.sv`
+
+Use `vlib <temporary-library>` followed by `vlog -work <temporary-library> -sv`
+and the three paths above from the repository root. Keep the compiled library
+outside the source tree. This supersedes the earlier unsuccessful compile
+attempt; compilation succeeded when the installed compiler ran outside the
+restricted execution sandbox. Simulation, timing validation, and coverage remain
+pending.

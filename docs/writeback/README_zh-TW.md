@@ -32,7 +32,9 @@ predictor 算預期結果，scoreboard 比較預期與實際結果。
 input interface 的所有 port 都是 `input wire`，由 LC3 bench 接入訊號。
 方向以此 interface 為準，因此 MemAccess 的 output `memout` 在這裡是 input。
 interface 已加入 `monitor_cb`，以 `input #1step` 定義上升緣前的取樣值；
-本地 timeunit 為 1ns、timeprecision 為 1ps。尚未實作讀取這些值的 monitor BFM。
+本地 timeunit 為 1ns、timeprecision 為 1ps。已實作 `writeback_in_monitor_bfm.sv` 的 `monitor` task，等待 clocking event
+後將所有欄位複製進 output struct；每次呼叫觀察一個上升緣，包含 reset 和
+writeback disabled 週期。BFM 不驅動 DUT；UVM monitor class 尚未實作。
 
 ## WB 訊號對照
 
@@ -100,7 +102,14 @@ VSR1/VSR2 為非同步讀取，即使 writeback disable 仍要檢查讀取。
 
 ## 本次驗證範圍
 
-核對 assignment、design spec、提供的 RTL top-level port map 及 P2 model。
-目前已建立型別定義與 input interface 的 clocking block。Verilator 因安裝缺少
-標準函式庫檔案而無法 lint；Questa 編譯嘗試也在環境中以 exit 159 結束，沒有
-編譯器診斷。因此尚未確認編譯成功，也尚未執行 LC3 simulation。
+2026-11-03 使用 Questa 2024.2 依序編譯 input types、input interface、input
+monitor BFM，結果為零 error、零 warning。編譯庫放在 `/tmp`，未加入 repo。
+先前受限環境中的編譯失敗已排除；本次以安裝的 compiler 在 sandbox 外成功執行。
+目前確認語法與型別能編譯，尚未執行模擬、取樣時序驗證或 coverage。
+
+重現方式：在 repo 根目錄執行 `vlib <暫存編譯庫>`，再以
+`vlog -work <暫存編譯庫> -sv` 依序編譯：
+
+1. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_types_pkg.sv`
+2. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_if.sv`
+3. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_monitor_bfm.sv`
