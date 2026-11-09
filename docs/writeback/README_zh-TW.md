@@ -34,7 +34,8 @@ input interface 的所有 port 都是 `input wire`，由 LC3 bench 接入訊號�
 interface 已加入 `monitor_cb`，以 `input #1step` 定義上升緣前的取樣值；
 本地 timeunit 為 1ns、timeprecision 為 1ps。已實作 `writeback_in_monitor_bfm.sv` 的 `monitor` task，等待 clocking event
 後將所有欄位複製進 output struct；每次呼叫觀察一個上升緣，包含 reset 和
-writeback disabled 週期。BFM 不驅動 DUT；UVM monitor class 尚未實作。
+writeback disabled 週期。BFM 不驅動 DUT；UVM monitor 已有宣告、constructor 和
+build_phase，取樣用的 run_phase 尚未實作。
 
 ## WB 訊號對照
 
@@ -115,6 +116,19 @@ monitor BFM，結果為零 error、零 warning。編譯庫放在 `/tmp`，未加
 3. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_monitor_bfm.sv`
 
 ## Input transaction
+
+## Input monitor 進度（2026-11-08）
+
+`writeback_in_pkg.sv` 已在 transaction 後 include `writeback_in_monitor.svh`。
+Monitor 繼承 `uvm_monitor` 並註冊至 factory，宣告 virtual BFM handle，
+在 constructor 建立 analysis port。`build_phase` 取得名為 `bfm` 的設定；
+找不到設定或取得 null handle 時，以 `uvm_fatal` 停止模擬。
+Testbench 之後需實例化 BFM，並在 `run_test()` 前設定其 handle。
+編譯時須先編譯 input interface 和 BFM，再編譯此 UVM package。
+目前尚未加入取樣用的 `run_phase`。這次 monitor 新增內容尚未編譯或模擬；
+目前 PATH 找不到 `vlog`。
+
+## Input transaction 詳細說明
 
 已新增 `writeback_in_transaction.svh`，繼承 `uvm_sequence_item`，內含
 `writeback_in_transfer_t sample`。Factory/field macros 註冊類別與 packed

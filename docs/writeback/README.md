@@ -20,7 +20,7 @@ are implemented. The interface's `monitor_cb` samples input fields using
 `input #1step` at each positive clock edge. The BFM's automatic `monitor` task
 waits for that event and copies all sampled fields into an output transfer struct.
 Each call observes one edge, including reset and write-disabled cycles; it does
-not drive the DUT or publish through a UVM analysis port. The UVM monitor class,
+not drive the DUT or publish through a UVM analysis port. The UVM monitor sampling loop,
 output observation, predictor, and scoreboard are still to be implemented.
 The input transaction and its UVM package wrapper are now implemented.
 
@@ -132,6 +132,19 @@ restricted execution sandbox. Simulation, timing validation, and coverage remain
 pending.
 
 ## Input transaction
+
+## Input monitor progress (November 8, 2026)
+
+`writeback_in_monitor.svh` is included after the transaction in the UVM package.
+It registers a `uvm_monitor` component, declares a virtual BFM handle, and creates
+its analysis port in the constructor. Its `build_phase` retrieves the `bfm`
+configuration and reports `UVM_FATAL` if the setting is missing or null.
+The bench must instantiate the BFM and configure its handle before `run_test()`.
+Compile the input interface and BFM before this UVM package.
+The sampling `run_phase` is not implemented yet. These monitor additions have
+not been compiled or simulated; `vlog` is not available on the current PATH.
+
+## Input transaction details
 
 `writeback_in_transaction.svh` extends `uvm_sequence_item` and contains a
 `writeback_in_transfer_t sample`. The factory/field macros register the class
