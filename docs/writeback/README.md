@@ -66,6 +66,17 @@ transactions, and absence of meaningful comparisons at end of test.
 
 ## Unknown values, disabled writes and reset
 
+The self-test reset timing now matches the team's `imem_coverage` HDL top:
+active high for five rising edges, then released by a nonblocking assignment.
+Both startup and mid-test reset use `apply_reset()`; `drive()` does not release
+reset. At integration the passive WB agents simply observe the shared top-level
+reset; five edges is a bench stimulus choice, not a requirement of the agents.
+[Team reset source](https://github.com/frankeric654/UVM-Verification-for-LC3-Processor/blob/imem_coverage/project_benches/imem_fetch_sandbox/tb/testbench/hdl_top.sv).
+This aligns stimulus timing only. Fetch's PC reset value does not define WB
+register/PSR reset values. The senior WB monitor waits for reset release, and the
+supplied WB model has no reset input; neither resolves WB's reset-state contract.
+
+
 The supplied function uses two-state bit ports. `reg_known` records whether each
 model register has a trustworthy complete value. The read check masks are captured
 before this edge's write. Startup unknown registers are skipped; a valid write

@@ -74,6 +74,10 @@ Environment 不產生 clock、不驅動 WB 輸入，也不控制測試長度。�
 同一個檔案裡有兩部分：module 提供 HDL 訊號和刺激，內嵌的 UVM test class 管理
 驗證環境和測試生命週期。這是 WB infrastructure 自測，不是最後 LC3 指令測試。
 
+`apply_reset()` 使用與組員相同的 reset 時序：保持高電位五個上升緣，再用 `<=`
+解除。`<=` 讓同步 RTL 在第五個 edge 仍看到 reset=1，下一個 edge 才看到解除。
+這只決定刺激時序，並不指定 WB PSR 的 reset 值。正常 `drive()` 不再改動 reset。
+
 Module 每 5ns 翻轉 clock，產生 10ns 週期。獨立的 behavioral fixture 保存自己
 的 regs／PSR，沒有與教授 model 共用 storage。Testbench 建立 interfaces、BFMs，
 用 configuration 把 handle 傳入 UVM，最後呼叫 run_test。

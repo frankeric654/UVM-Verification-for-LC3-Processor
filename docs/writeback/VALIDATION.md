@@ -75,3 +75,26 @@ All three targeted cases passed; script exit status 0. The six other previously
 validated fault/scoreboard cases were not rerun for this wiring-only change.
 The default regression now includes all nine cases. Current logs/UCDB/report are
 in `/tmp/ece748-wb-configuration`.
+
+## Shared reset timing — November 13, 2026
+
+The team's `imem_coverage` HDL top holds active-high reset for five rising
+edges and releases it with NBA. The WB smoke now uses that same sequence at
+startup and mid-test via `apply_reset()`. `drive()` no longer releases reset.
+The production passive WB agents continue observing the LC3's shared reset;
+no second reset source or UVMF dependency was added.
+
+Command: `WB_TEST_SUITE=configuration WB_BUILD_DIR=/tmp/ece748-wb-team-reset bash scripts/writeback/regress.sh`
+
+- Complete source/test-top compile: 0 errors, 0 warnings.
+- Smoke: 86 edge pairs, 190 field checks, 0 mismatches, 12 wholly unchecked
+  reset/startup pairs, UVM_ERROR=0 and UVM_FATAL=0.
+- Missing configuration and null BFM initialization checks: both passed with
+  their expected NO_CONFIG/NO_BFM fatal diagnostics.
+- Script exit status: 0. Logs/UCDB/report: `/tmp/ece748-wb-team-reset`.
+
+The larger pair count reflects longer reset pulses, not added state verification.
+No predictor/scoreboard behavior changed. Prior fault-injection/scoreboard
+results above are historical and were not rerun for this reset-stimulus change.
+Matching the reset waveform or the senior monitor's wait-for-reset task does not
+define register/PSR reset values. The WB reset-state/retention limitation remains.

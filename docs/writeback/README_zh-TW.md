@@ -57,6 +57,18 @@ Scoreboard 按此標記配對，不依賴 callback 抵達順序。假設同一�
 
 ## X、disabled 與 reset
 
+Reset 時序已對齊組員 `imem_coverage` 的 HDL top：active-high，保持五個 clock
+上升緣，然後以 `reset <= 1'b0` 在 NBA 解除。自測的啟動與中途 reset 都使用
+`apply_reset()`；`drive()` 不再自行解除 reset。整合時 WB 是 passive，直接觀察
+團隊 top 的同一條 reset，不另外產生 reset，也不要求一定維持五個週期才可工作。
+來源：[團隊 HDL top](https://github.com/frankeric654/UVM-Verification-for-LC3-Processor/blob/imem_coverage/project_benches/imem_fetch_sandbox/tb/testbench/hdl_top.sv)。
+
+這裡統一的是「reset 的產生時序」，不是把 Fetch 的 PC reset 規格套到 WB。
+學長 WB 的 `wait_for_reset()` 主要等 reset 解除；其 predictor 呼叫的教授
+`writeback_model()` 也沒有 reset 參數，因此不能由此推論 WB PSR 或 register 的
+reset 值。現有 predictor 保留狀態有效標記失效、之後重新建立預期值的處理。
+
+
 教授 model 的 bit 參數不保留 X/Z，因此 adapter 用 `reg_known` 記錄每個 register
 是否有可信的完整預期值。讀值有效標記在本次寫入前取得。尚未初始化的 register
 暫不比較；有效寫入後，後續 edge 才可比較。已知預期值遇到實際 X/Z 會報錯。

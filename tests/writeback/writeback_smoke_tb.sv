@@ -69,10 +69,20 @@ module writeback_smoke_tb;
     endtask
   endclass
 
+  // Match the team's IMem/Fetch bench: active-high reset for five rising
+  // edges, released in NBA so synchronous RTL still sees reset at edge five.
+  // This defines stimulus timing, not the unspecified WB reset state values.
+  task automatic apply_reset();
+    reset = 1'b1;
+    enable_writeback = 1'b0;
+    repeat (5) @(posedge clock);
+    reset <= 1'b0;
+    @(negedge clock);
+  endtask
+
   task automatic drive(bit en, bit [1:0] source, bit [2:0] dest,
                        bit [2:0] read1, bit [2:0] read2, logic [15:0] value);
     @(negedge clock);
-    reset = 0;
     enable_writeback = en;
     W_Control = source;
     dr = dest;
@@ -104,7 +114,7 @@ module writeback_smoke_tb;
     run_test("writeback_smoke_test");
   end
   initial begin
-    repeat (2) @(negedge clock);
+    apply_reset();
     for (int source = 0; source < 3; source++) begin
       for (int i = 0; i < 8; i++) begin
         drive(1, source, i, i, 7-i, 16'(i + source*16));
@@ -125,8 +135,7 @@ module writeback_smoke_tb;
     drive(1, 1, 3, 3, 2, 16'd17);
     drive(0, 0, 0, 3, 2, 0);
     @(negedge clock);
-    reset = 1;
-    enable_writeback = 0;
+    apply_reset();
     // Reinitialization after reset must reestablish all known values.
     for (int i = 0; i < 8; i++) drive(1, 0, i, i, 7-i, 16'(100+i));
     for (int i = 0; i < 8; i++) drive(0, 0, 0, i, 7-i, 0);
