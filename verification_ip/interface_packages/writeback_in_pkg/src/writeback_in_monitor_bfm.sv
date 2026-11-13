@@ -7,8 +7,10 @@ interface writeback_in_monitor_bfm (writeback_in_if bus);
 
   // One call observes one rising edge. Include reset and disabled cycles so
   // the predictor can track reset and verify that writes remain disabled.
-  task automatic monitor(output writeback_in_transfer_t sample);
+  task automatic monitor(output writeback_in_transfer_t sample,
+                         output time edge_time_ps);
     @(bus.monitor_cb);
+    edge_time_ps = time'($realtime / 1ps);
 
     sample.reset            = bus.monitor_cb.reset;
     sample.enable_writeback = bus.monitor_cb.enable_writeback;

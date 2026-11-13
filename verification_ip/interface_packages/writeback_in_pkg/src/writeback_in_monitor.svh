@@ -1,7 +1,8 @@
-// Passive WB input monitor; sampling is added in the following step.
+// Passive WB input monitor: publish a fresh transaction for each sampled edge.
 class writeback_in_monitor extends uvm_monitor;
   `uvm_component_utils(writeback_in_monitor)
 
+  writeback_in_configuration configuration;
   virtual writeback_in_monitor_bfm bfm;
   uvm_analysis_port #(writeback_in_transaction) analysis_port;
 
@@ -13,8 +14,25 @@ class writeback_in_monitor extends uvm_monitor;
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
 
-    if (!uvm_config_db#(virtual writeback_in_monitor_bfm)::get(
-          this, "", "bfm", bfm) || bfm == null)
-      `uvm_fatal("NO_BFM", "Writeback input BFM is missing or null")
+    if (!uvm_config_db#(writeback_in_configuration)::get(
+          this, "", "configuration", configuration) || configuration == null)
+      `uvm_fatal("NO_CONFIG", "Writeback in monitor configuration is missing or null")
+    bfm = configuration.monitor_bfm;
+    if (bfm == null)
+      `uvm_fatal("NO_BFM", "Writeback in configuration has a null monitor BFM")
   endfunction
+  
+  task run_phase(uvm_phase phase);
+    writeback_in_transfer_t observed;
+    writeback_in_transaction txn;
+    time edge_time_ps;
+
+    forever begin
+      bfm.monitor(observed, edge_time_ps);
+      txn = writeback_in_transaction::type_id::create("txn");
+      txn.sample = observed;
+      txn.edge_time_ps = edge_time_ps;
+      analysis_port.write(txn);
+    end
+  endtask
 endclass

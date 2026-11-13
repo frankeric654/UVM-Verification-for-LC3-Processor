@@ -4,142 +4,112 @@
 
 負責人：Cheng-Wei（clin39）；分支：`stage/writeback`。
 
-## 作業範圍
+## 目前進度（2026-11-11）
 
-P3 是 LC3 的 UVM/UVMF 驗證環境。老師已提供 Writeback RTL；我們負責
-`writeback_in_pkg`、`writeback_out_pkg`、`writeback_env_pkg`。
-兩個 agent 都是 passive：只觀察 LC3 內部訊號，不能驅動訊號。
-predictor 算預期結果，scoreboard 比較預期與實際結果。
-依 assignment slides 7–9，最終在完整 LC3 bench 模擬。
-團隊分五個人的工作，但作業要求六個 sub-environment，Decode 也需要整合。
+已有 input/output passive agent、interface、clocking block、BFM、四態資料型別、
+transaction、monitor，以及 predictor adapter、scoreboard、WB functional coverage
+和 `writeback_environment`。程式使用 UVM 1.2；與組員 UVMF configuration／wrapper
+及完整 LC3 bench 的接合仍待完成。兩個 WB agent 都不建立 driver／sequencer。
 
-## 本機位置
+```text
+in_agent → predictor → scoreboard 的預期值入口
+         → coverage
+out_agent            → scoreboard 的實際值入口
+```
 
-`ECE748/clin39_p3/` 放原始 PDF 和 RTL ZIP；`repo/` 是 GitHub checkout。
-公開 repo 目前只新增自己的驗證原始碼與筆記。
+## Configuration 的資料路徑（維持一般 UVM）
 
-## 學習與實作順序
+已加入 `writeback_in_configuration`、`writeback_out_configuration`，都繼承
+`uvm_object`，各自保存 virtual `monitor_bfm` handle。建立 configuration 不會建立
+BFM；testbench 將既有 BFM handle 放入物件，透過 config_db 的 `configuration`
+設定名稱交給對應 agent。Agent 取得並檢查後，把同一個物件傳給 child monitor；
+monitor 再用 `configuration.monitor_bfm` 進行取樣。
 
-1. **本次：訊號與資料型別。** 看下方對照表及兩個 `*_types_pkg.sv`。
-2. 建 input/output interface 與 monitor BFM，確認取樣點。
-3. 建 transaction、monitor、configuration、passive agent 與 coverage。
-4. 建有狀態的 predictor，追蹤八個暫存器和 PSR。
-5. 建 scoreboard，處理對齊、未知值及結束時未比較資料。
-6. 建 environment，連接 analysis ports，接入組員的 LC3 bench。
-7. 在 LC3 level 執行測試，記錄 bug、coverage、transcript，再提交。
+這取代先前直接把 virtual BFM 放在 monitor 路徑下的做法。連線 helper 和 smoke bench
+已同步更新；沒有導入 UVMF，也沒有改成學長的繼承架構。兩個 agent 固定 passive，
+目前不提供 active 模式設定。缺少／null configuration 回報 `NO_CONFIG`；BFM 為 null
+回報 `NO_BFM`，都在初始化期間停止，避免進入取樣後才發現空 handle。
 
-目前已建立 input/output 型別及 `writeback_in_if.sv`，還不是可執行的 UVM environment。
-input interface 的所有 port 都是 `input wire`，由 LC3 bench 接入訊號。
-方向以此 interface 為準，因此 MemAccess 的 output `memout` 在這裡是 input。
-interface 已加入 `monitor_cb`，以 `input #1step` 定義上升緣前的取樣值；
-本地 timeunit 為 1ns、timeprecision 為 1ps。已實作 `writeback_in_monitor_bfm.sv` 的 `monitor` task，等待 clocking event
-後將所有欄位複製進 output struct；每次呼叫觀察一個上升緣，包含 reset 和
-writeback disabled 週期。BFM 不驅動 DUT；UVM monitor 已有宣告、constructor 和
-build_phase，取樣用的 run_phase 尚未實作。
+新增測試可用 `WB_TEST_SUITE=configuration bash scripts/writeback/regress.sh` 執行，
+涵蓋正常 smoke、缺少設定和 null BFM；預設完整 regression 為九項。
+後兩項是負向測試，預期各有一個 fatal，script 會檢查 ID 和發生時間。
 
-## WB 訊號對照
+教學順序與 environment／test 的程式對照見
+[逐段教學筆記](WALKTHROUGH_zh-TW.md)。對話中先講 configuration，再講 environment，
+最後講 test；這份筆記供回頭查閱，不表示需要一次全部讀完。
 
-以下以提供的 `TopLevelLC3.v` 中 `Writeback WB` 的連接為準。
-假設頂層 DUT instance 叫 `dut`，右欄是 `dut` 內部的訊號名。
+## 教授 model 與取樣約定
 
-| WB port / 型別欄位 | bits | LC3 內訊號 | 用途 |
-| --- | --- | --- | --- |
-| clock | 1 | clock | 寫入時脈；不是 transaction payload |
-| reset | 1 | reset | reset；必須讓 predictor 看得到 |
-| enable_writeback | 1 | enable_writeback | 是否允許寫入 |
-| W_Control | 2 | W_Control_out | 選擇寫回資料 |
-| aluout | 16 | aluout | ALU 結果 |
-| memout | 16 | memout | load 讀回資料 |
-| pcout | 16 | pcout | LEA 位址結果 |
-| npc | 16 | npc_out_dec | 保留 RTL port；合法選擇 0/1/2 不使用它 |
-| sr1, sr2 | 各 3 | sr1, sr2 | 讀取 R0–R7 的位址 |
-| dr | 3 | dr | 寫入 R0–R7 的位址 |
-| d1 | 16 | VSR1 | 非同步讀取 RegFile[sr1] |
-| d2 | 16 | VSR2 | 非同步讀取 RegFile[sr2] |
-| psr | 3 | psr | 負、零、正旗標 |
+Predictor 呼叫教授原始的 `lc3_prediction_pkg::writeback_model`，未修改或複製教授
+原始檔到公開 repo。其 static register array 為共用狀態，每次模擬只能有一個 WB
+predictor／model 呼叫者；每個測試應重新啟動模擬，不能靠建立新 environment 清除模型。
 
-`d1/d2` 是 RTL port 名稱，`VSR1/VSR2` 是 top-level wire 名稱。
-input/output 的 struct 是 monitor 要傳送的資料格式，不會自己觀察 DUT。
-使用 `logic` 保留 X/Z，避免未知值被轉成 0 後掩蓋問題。
+教授 model 先讀 register，再執行本次寫入。因此 input、output 的 sr1/sr2/d1/d2
+都在上升緣前以 `input #1step` 取樣；output PSR 以 `input #0` 在 Observed region
+取得一般 RTL 的 NBA 與組合邏輯更新後結果。一筆 output 刻意包含「寫入前讀值」與
+「寫入後 PSR」，取代先前所有 output 都在更新後取樣的做法。目前只在 clock edge
+檢查讀值，沒有逐次檢查兩個 edge 之間所有非同步讀取變化。
 
-## 預期功能
+BFM 回傳以 ps 為單位的絕對 edge 時間，transaction 用 `edge_time_ps` 保存。
+Scoreboard 按此標記配對，不依賴 callback 抵達順序。假設同一時脈域且每 ps 最多一個
+上升緣。接收端 clone transaction，使用 `!==` 比較以抓到非預期 X/Z，並檢查重複、
+結束時未配對，以及沒有有效比較的情況。
 
-Design spec WRITEBACK 小節及 P2 提供的 writeback_model 支持：
+## X、disabled 與 reset
 
-| W_Control | 寫入資料 |
-| --- | --- |
-| 2'b00 | aluout |
-| 2'b01 | memout |
-| 2'b10 | pcout |
+教授 model 的 bit 參數不保留 X/Z，因此 adapter 用 `reg_known` 記錄每個 register
+是否有可信的完整預期值。讀值有效標記在本次寫入前取得。尚未初始化的 register
+暫不比較；有效寫入後，後續 edge 才可比較。已知預期值遇到實際 X/Z 會報錯。
 
-`2'b11` 先列為待釐清，不自行假設為 npc。
-enable_writeback 有效時寫入 RegFile[dr]，並依寫入值更新 PSR：
-負數 100、零 010、正數 001。沒有寫入時應保留先前狀態。
-R0 是普通可寫暫存器，不能當成固定的 zero register。
-VSR1/VSR2 為非同步讀取，即使 writeback disable 仍要檢查讀取。
+有效寫入需要 enable、dr、選擇與被選取的資料皆已知；未使用資料來源的 X 不影響寫入。
+Disabled 仍預測讀取，PSR 使用暫存的最後有效預期值。未知或未定義的有效寫入不會直接
+以二態值寫進教授模型，而是使受影響的狀態標記失效並發出 `WB_UNDEFINED_WRITE`。
+W_Control=11 沒有已確認定義，不能假設選 npc。預期值不讀取 DUT register 來計算。
 
-## 時序與未知值：實作前要確認
+提供的 WB 文字規格／model 尚不足以確定 reset 值。Reset=1 或 X 時，adapter 不呼叫
+model，清除已知標記並送出不比較的 sample；之後由已知寫入重新建立可信狀態。
+因此目前「不驗證 reset 值與跨 reset 的 register 保留行為」，不能宣稱 reset 驗證完成。
+Scoreboard 的 `unchecked_pairs` 會顯示整筆未檢查的數量。
 
-- Spec 說 register file 初始可能是 X，不能在 reference model 裡任意清成零。
-  為每個暫存器追蹤是否已初始化；測試先透過指令初始化暫存器。
-- WB reset 對 PSR 的精確值、register file 保留行為，需在實作 predictor 前核對。
-- 在上升緣前擷取本次寫入的 enable、dr、選擇與資料。
-  Execute 也在上升緣更新輸出，不能用更新後的 dr 搭配上一筆寫入。
-- Output monitor 等待 NBA 與組合邏輯穩定後取樣，使用此時的 sr1/sr2 查模型。
-  input/output 必須有共同的 cycle 對齊方式；不能只靠 callback 先後順序。
-- P2 的 writeback_model 有 static regfile、bit ports，且先讀再寫；不宜原封不動
-  用來預測上升緣後的非同步讀值。會另做每個 predictor instance 自有的狀態。
+## 編譯與基礎測試
 
-## 規劃的驗證案例
+先載入 simulator 和 license 環境。在學校機器可使用：
 
-三種資料來源；八個 dr/sr1/sr2；負/零/正與邊界值；disable 保持；
-同一個 register 讀寫；連續覆寫；不同 sr 的非同步讀取；啟動未知值；reset。
-刺激由完整 LC3 的 instruction/data memory responder 產生，WB agent 不驅動 DUT。
+```bash
+source /etc/profile.d/modules.sh
+module use /mnt/apps/modules/ece
+module load mentor/questa/2024.2
+bash scripts/writeback/compile.sh
+bash scripts/writeback/regress.sh
+```
 
-## 整合需要組員提供的資料
+在 repo 根目錄執行。可設定 `QUESTA_HOME`、`LC3_PREDICTION_DIR`，後者預設為
+`../lc3_prediction_pkg`。`WB_BUILD_DIR` 可指定輸出目錄，預設建立於 `/tmp`。
+編譯順序為教授 package、types、interfaces、BFMs、input/output packages、environment
+package，最後是測試檔；使用相同版本 UVM 1.2 library 與 header。
 
-共同 UVMF 版本與 generator 慣例、LC3 bench instance 名稱、共同 sampling/cycle
-約定，以及頂層 integration 和 imem/dmem 的負責人。這些不影響先理解訊號。
+Smoke fixture 是另寫的簡單行為模型，不是老師 LC3 RTL，也不是作業最終模擬證據。
+測試包含所有 register、三種資料來源、disabled 讀寫、同 register 讀寫、覆寫、正負零
+邊界、未使用來源的 X、未知寫入後重新初始化、NBA 時改讀取地址，以及 reset 後重建狀態。
+負向測試刻意破壞 d1／PSR；其他測試涵蓋 actual 先抵達、clone 隔離、未知值遮罩、
+已知預期遇到實際 X、重複與未配對交易。Regression 檢查 UVM error 數量及 ID，
+不只看 process exit code。Log／UCDB 留在輸出目錄。這是 WB functional coverage，
+團隊的 instruction coverage／test plan 仍需完成。結果見 [VALIDATION.md](VALIDATION.md)。
 
-## 本次驗證範圍
+## 組員接入完整 LC3 的方式
 
-2026-11-03 使用 Questa 2024.2 依序編譯 input types、input interface、input
-monitor BFM，結果為零 error、零 warning。編譯庫放在 `/tmp`，未加入 repo。
-先前受限環境中的編譯失敗已排除；本次以安裝的 compiler 在 sandbox 外成功執行。
-目前確認語法與型別能編譯，尚未執行模擬、取樣時序驗證或 coverage。
+1. 依上述順序編譯，加入各 package 的 src include path。
+2. 在 LC3 environment 的 build_phase 建立一個 `writeback_environment`，例如命名
+   `writeback_env`，並 import `writeback_env_pkg`。
+3. 在 HDL top 內 include `integration/writeback/writeback_connections.svh`；DUT instance
+   不叫 dut 時設定 `WB_DUT_PATH`。連線使用 WB module 的實際 ports，因此控制訊號
+   會接到 LC3 的 W_Control_out，而非 Decode 的 W_Control。
+4. 在 run_test() 前呼叫 `configure_writeback_bfms("uvm_test_top.env.writeback_env")`，
+   字串改成實際 environment 路徑。HDL/HVL 分開時，可由啟動 run_test 的 initial block
+   透過 HDL top 階層呼叫這個 function。
+5. 由完整 LC3 的 imem/dmem responder 提供刺激，用指令初始化 register；最後取樣完成
+   後才 drop objection。WB monitor 不自行 raise objection。
 
-重現方式：在 repo 根目錄執行 `vlib <暫存編譯庫>`，再以
-`vlog -work <暫存編譯庫> -sv` 依序編譯：
-
-1. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_types_pkg.sv`
-2. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_if.sv`
-3. `verification_ip/interface_packages/writeback_in_pkg/src/writeback_in_monitor_bfm.sv`
-
-## Input transaction
-
-## Input monitor 進度（2026-11-08）
-
-`writeback_in_pkg.sv` 已在 transaction 後 include `writeback_in_monitor.svh`。
-Monitor 繼承 `uvm_monitor` 並註冊至 factory，宣告 virtual BFM handle，
-在 constructor 建立 analysis port。`build_phase` 取得名為 `bfm` 的設定；
-找不到設定或取得 null handle 時，以 `uvm_fatal` 停止模擬。
-Testbench 之後需實例化 BFM，並在 `run_test()` 前設定其 handle。
-編譯時須先編譯 input interface 和 BFM，再編譯此 UVM package。
-目前尚未加入取樣用的 `run_phase`。這次 monitor 新增內容尚未編譯或模擬；
-目前 PATH 找不到 `vlog`。
-
-## Input transaction 詳細說明
-
-已新增 `writeback_in_transaction.svh`，繼承 `uvm_sequence_item`，內含
-`writeback_in_transfer_t sample`。Factory/field macros 註冊類別與 packed
-payload；constructor 將物件名稱傳給父類別。每筆取樣都要建立新的 transaction，
-因為複製 class handle 不會建立獨立物件。
-
-`writeback_in_pkg.sv` 匯入 UVM 與 types 後 include 此 class；編譯 package，
-不要另外編譯 `.svh`。先編譯 types package，再編譯此 UVM package，並將 `src`
-加入 include path。2026-11-03 使用 Questa 2024.2、UVM 1.2 編譯通過，零 error/warning。
-使用 `-L <questa-install>/uvm-1.2`、
-`+incdir+<questa-install>/verilog_src/uvm-1.2/src`，及
-`+incdir+verification_ip/interface_packages/writeback_in_pkg/src`。
-本機預設 mtiUvm 是 UVM 1.1d，不能搭配 1.2 header；library 與 header 必須一致。
-本次僅確認編譯，尚未驗證 transaction 執行行為或 LC3 simulation。
+連線片段已在暫存 probe top 與老師的加密 LC3 RTL 一起編譯通過，零 error/warning；
+尚未在團隊完整 bench 模擬。實際 instance 路徑、
+responder 分工與 UVMF wrapper 尚未在本機確定；基礎 regression 通過不代表 P3 全部完成。
