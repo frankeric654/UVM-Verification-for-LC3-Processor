@@ -1,0 +1,18 @@
+uvmf:
+  benches:
+    imem_fetch_sandbox:
+      active_passive:
+      - bfm_name: fetch_env_fetch_in_agent
+        value: PASSIVE
+      - bfm_name: fetch_env_fetch_out_agent
+        value: PASSIVE
+      - bfm_name: imem_agent
+        value: ACTIVE
+      clock_half_period: 5ns
+      clock_phase_offset: 0ns
+      existing_library_component: 'True'
+      interface_params: []
+      reset_assertion_level: 'True'
+      reset_duration: 50ns
+      top_env: imem_fetch_sandbox
+      use_dpi_link: 'False'

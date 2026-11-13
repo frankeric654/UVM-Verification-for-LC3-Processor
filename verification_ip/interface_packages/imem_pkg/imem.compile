@@ -1,0 +1,4 @@
+needs:
+  - imem_shared.compile
+  - imem_hvl.compile
+  - imem_hdl.compile

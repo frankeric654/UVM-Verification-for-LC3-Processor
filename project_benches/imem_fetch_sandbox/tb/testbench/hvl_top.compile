@@ -1,0 +1,4 @@
+needs:
+  - ../tests/imem_fetch_sandbox_tests_pkg.compile
+src:
+  - hvl_top.sv

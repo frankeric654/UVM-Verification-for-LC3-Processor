@@ -1,0 +1,11 @@
+needs:
+  - $UVMF_HOME/uvmf_base_pkg/uvmf_base_pkg_hdl.compile
+  - ../parameters/imem_fetch_sandbox_parameters_pkg.compile
+  - ../../../../verification_ip/interface_packages/fetch_in_pkg/fetch_in_shared.compile
+  - ../../../../verification_ip/interface_packages/fetch_in_pkg/fetch_in_hdl.compile
+  - ../../../../verification_ip/interface_packages/fetch_out_pkg/fetch_out_shared.compile
+  - ../../../../verification_ip/interface_packages/fetch_out_pkg/fetch_out_hdl.compile
+  - ../../../../verification_ip/interface_packages/imem_pkg/imem_shared.compile
+  - ../../../../verification_ip/interface_packages/imem_pkg/imem_hdl.compile
+src:
+  - hdl_top.sv

@@ -1,0 +1,8 @@
+@use $UVMF_HOME/uvmf_base_pkg/uvmf_base_pkg.vinfo
+@use $UVMF_VIP_LIBRARY_HOME/interface_packages/fetch_in_pkg/fetch_in_pkg.vinfo
+@use $UVMF_VIP_LIBRARY_HOME/interface_packages/fetch_out_pkg/fetch_out_pkg.vinfo
+@use $UVMF_VIP_LIBRARY_HOME/interface_packages/imem_pkg/imem_pkg.vinfo
+@use $UVMF_VIP_LIBRARY_HOME/environment_packages/imem_fetch_sandbox_env_pkg/imem_fetch_sandbox_env_pkg.vinfo
+@use $UVMF_PROJECT_DIR/tb/parameters/imem_fetch_sandbox_parameters_pkg.vinfo
++incdir+@vinfodir
+imem_fetch_sandbox_sequences_pkg.sv

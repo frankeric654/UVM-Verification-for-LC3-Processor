@@ -1,0 +1,9 @@
+needs:
+  - $UVMF_HOME/uvmf_base_pkg/uvmf_base_pkg.compile
+  - ../../interface_packages/imem_pkg/imem_shared.compile
+  - ../../interface_packages/imem_pkg/imem_hvl.compile
+  - ../fetch_env_pkg/fetch_env_pkg.compile
+
+src:
+  - imem_fetch_sandbox_env_pkg.sv
+

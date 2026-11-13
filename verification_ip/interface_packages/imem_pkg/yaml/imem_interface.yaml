@@ -1,0 +1,58 @@
+uvmf:
+  interfaces:
+    imem:
+      clock: clock
+      config_constraints: []
+      config_vars: []
+      existing_library_component: 'True'
+      gen_inbound_streaming_driver: 'False'
+      hdl_pkg_parameters: []
+      hdl_typedefs:
+      - name: imem_opcode_e
+        type: enum bit [3:0] { IMEM_BR = 4'h0, IMEM_ADD = 4'h1, IMEM_LD = 4'h2, IMEM_ST = 4'h3, IMEM_JSR = 4'h4, IMEM_AND = 4'h5, IMEM_LDR = 4'h6, IMEM_STR = 4'h7, IMEM_RTI = 4'h8, IMEM_NOT = 4'h9, IMEM_LDI = 4'hA, IMEM_STI = 4'hB, IMEM_JMP = 4'hC, IMEM_RESERVED = 4'hD, IMEM_LEA = 4'hE, IMEM_TRAP = 4'hF }
+      hvl_pkg_parameters: []
+      hvl_typedefs: []
+      parameters: []
+      ports:
+      - dir: output
+        name: pc
+        reset_value: '''bz'
+        width: '16'
+      - dir: output
+        name: instrmem_rd
+        reset_value: '''bz'
+        width: '1'
+      - dir: input
+        name: Instr_dout
+        reset_value: 16'h1020
+        width: '16'
+      - dir: input
+        name: complete_instr
+        reset_value: 1'b0
+        width: '1'
+      reset: reset
+      reset_assertion_level: 'True'
+      response_info:
+        data: []
+        operation: 1'b1
+      transaction_constraints:
+      - comment: ''
+        name: legal_opcode_c
+        value: '{ instr[15:12] inside { IMEM_BR, IMEM_ADD, IMEM_LD, IMEM_ST, IMEM_AND, IMEM_LDR, IMEM_STR, IMEM_NOT, IMEM_LDI, IMEM_STI, IMEM_JMP, IMEM_LEA }; }'
+      - comment: ''
+        name: legal_fixed_bits_c
+        value: '{ if ((instr[15:12] inside { IMEM_ADD, IMEM_AND }) && (instr[5] == 1''b0)) instr[4:3] == 2''b00; if (instr[15:12] == IMEM_NOT) instr[5:0] == 6''b111111; if (instr[15:12] == IMEM_JMP) { instr[11:9] == 3''b000; instr[5:0] == 6''b000000; } }'
+      transaction_vars:
+      - comment: PC of the fetch request (filled in from the bus)
+        iscompare: 'True'
+        isrand: 'False'
+        name: addr
+        type: bit [15:0]
+        unpacked_dimension: ''
+      - comment: Instruction word returned for that request
+        iscompare: 'True'
+        isrand: 'True'
+        name: instr
+        type: bit [15:0]
+        unpacked_dimension: ''
+      use_dpi_link: 'False'
