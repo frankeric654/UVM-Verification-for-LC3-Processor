@@ -1,0 +1,2 @@
+comp_mem_access_env_pkg:
+	vlog $(ECE748_PROJECT_HOME)/verification_ip/environment_packages/mem_access_env_pkg/mem_access_env_pkg.sv
