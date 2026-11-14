@@ -9,7 +9,7 @@ class decode_in_configuration extends uvm_object;
     bit coverage_enable = 1;
 
     // Controls whether the agent creates its driver.
-    uvm_active_passive_enum is_active = UVM_ACTIVE;
+    uvm_active_passive_enum is_active = UVM_ACTIVE; // default active
 
     function new(string name = "decode_in_configuration");
         super.new(name);
