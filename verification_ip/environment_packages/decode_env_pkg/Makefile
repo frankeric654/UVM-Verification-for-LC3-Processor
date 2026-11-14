@@ -1,0 +1,2 @@
+comp_decode_env_pkg:
+	vlog $(ECE748_PROJECT_HOME)/verification_ip/environment_packages/decode_env_pkg/decode_env_pkg.sv
