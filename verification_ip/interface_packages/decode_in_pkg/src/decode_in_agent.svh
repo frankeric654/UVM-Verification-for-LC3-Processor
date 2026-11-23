@@ -13,8 +13,7 @@ class decode_in_agent extends uvm_agent;
 
     function new(string name = "decode_in_agent", uvm_component parent = null);
         super.new(name, parent);
-        // agent hard-coded to be active
-        is_active = UVM_ACTIVE;
+        is_active = UVM_PASSIVE;
     endfunction
     
     virtual function void build_phase(uvm_phase phase);
@@ -26,16 +25,17 @@ class decode_in_agent extends uvm_agent;
             `uvm_fatal("NOCONFIG", "Missing decode input configuration")
         end
 
-        sequencer = uvm_sequencer#(decode_in_transaction)::type_id::create(
-            "sequencer", this
-        );
-        driver = decode_in_driver::type_id::create("driver", this);
+        is_active = configuration.is_active;
+        if (is_active == UVM_ACTIVE) begin
+            sequencer = uvm_sequencer#(decode_in_transaction)::type_id::create("sequencer", this);
+            driver = decode_in_driver::type_id::create("driver", this);
+            driver.bfm = configuration.driver_bfm;
+        end
         monitor = decode_in_monitor::type_id::create("monitor", this);
         if (configuration.coverage_enable) begin
             coverage = decode_in_coverage::type_id::create("coverage", this);
         end
 
-        driver.bfm = configuration.driver_bfm;
         monitor.bfm = configuration.monitor_bfm;
 
         monitor_ap = new("monitor_ap", this);
@@ -45,7 +45,8 @@ class decode_in_agent extends uvm_agent;
     virtual function void connect_phase(uvm_phase phase);
         super.connect_phase(phase);
         // connect sequencer to driver
-        driver.seq_item_port.connect(sequencer.seq_item_export);
+        if (is_active == UVM_ACTIVE)
+            driver.seq_item_port.connect(sequencer.seq_item_export);
         // connect coverage to driver analysis port if coverage is enabled
         if (coverage != null) begin
             monitor.analysis_port.connect(coverage.analysis_export);

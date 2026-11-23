@@ -6,9 +6,9 @@ package decode_out_pkg;
     `include "src/decode_out_transaction.svh"
     `include "src/decode_out_coverage.svh"
     `include "src/decode_out_configuration.svh"
-    `include "src/decode_out_driver.svh"
+    // Output agent is passive: no driver implementation is required.
     `include "src/decode_out_monitor.svh"
-    `include "src/decode_out_random_sequence.svh"
+
     `include "src/decode_out_agent.svh"
     
 

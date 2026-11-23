@@ -3,7 +3,7 @@ class decode_out_configuration extends uvm_object;
     `uvm_object_utils(decode_out_configuration)
 
     // handles to the HDL BFMs instantiated in hdl_top
-    virtual decode_out_driver_bfm  driver_bfm;
+
     virtual decode_out_monitor_bfm monitor_bfm;
 
     // controls whether a coverage collector is instantiated in the agent
@@ -18,9 +18,8 @@ class decode_out_configuration extends uvm_object;
 
     virtual function string convert2string();
         return $sformatf(
-            "is_active: %s, driver_bfm: %s, monitor_bfm: %s, coverage_enable: %b",
+            "is_active: %s, monitor_bfm: %s, coverage_enable: %b",
             is_active.name(),
-            (driver_bfm == null) ? "null" : "set",
             (monitor_bfm == null) ? "null" : "set",
             coverage_enable
         );
@@ -56,22 +55,9 @@ class decode_out_configuration extends uvm_object;
             )
         end
 
-        if (is_active == UVM_ACTIVE) begin
-            if (!uvm_config_db#(virtual decode_out_driver_bfm)::get(
-                    null,
-                    agent_path,
-                    "driver_bfm",
-                    driver_bfm
-                )) begin
-                `uvm_fatal(
-                    "NODRIVERBFM",
-                    $sformatf(
-                        "Could not find driver BFM at scope '%s' with field 'driver_bfm'",
-                        agent_path
-                    )
-                )
-            end
-        end
+        if (is_active != UVM_PASSIVE)
+            `uvm_fatal("DECODE_OUT_ACTIVITY", "Decode output agent must be passive")
+
     endfunction
 
 endclass
