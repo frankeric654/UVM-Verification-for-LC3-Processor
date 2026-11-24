@@ -41,6 +41,15 @@ class mem_access_predictor extends uvm_subscriber #(mem_access_in_transaction);
             return;
         end
 
+        // The instructor model uses 2-state output arguments,
+        // which convert high-impedance values to zero.
+        // Restore the specified idle outputs before comparison.
+        if (t.mem_state === 2'b11) begin
+            predicted_transaction.Data_addr = 16'hzzzz;
+            predicted_transaction.Data_din  = 16'hzzzz;
+            predicted_transaction.Data_rd   = 1'bz;
+        end
+
         predictor_ap.write(predicted_transaction);
     endfunction
 endclass : mem_access_predictor
