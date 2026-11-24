@@ -6,6 +6,8 @@ sim_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 exec "${LC3_PYTHON:-python3}" - "$sim_dir" "$@" <<'PY'
 from pathlib import Path
 import argparse
+import json
+import shlex
 import os
 import re
 import subprocess
@@ -17,6 +19,9 @@ start = time.perf_counter()
 sim = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(sim))
 from sim_checks import read_sim_summary
+from sim_paths import (
+    resolve_tools, resolve_rtl, env_words, extra_sources
+)
 repo = sim.parents[2]
 
 ap = argparse.ArgumentParser()
@@ -30,15 +35,24 @@ args = ap.parse_args(sys.argv[2:])
 if args.timeout <= 0 or args.seed <= 0:
     ap.error("seed and timeout must be positive")
 
-for name in ("QUESTA_HOME", "UVMF_HOME"):
-    if not os.environ.get(name) or not Path(os.environ[name]).is_dir():
-        ap.error(f"{name} must point to an existing directory")
+try:
+    questa, uvmf = resolve_tools(
+        os.getenv("QUESTA_HOME"),
+        os.getenv("UVMF_HOME")
+    )
 
-questa = Path(os.environ["QUESTA_HOME"])
-rtl = Path(os.environ.get(
-    "LC3_RTL_DIR",
-    str(repo / "project_benches/project3/rtl")
-)).resolve()
+    rtl = resolve_rtl(repo, os.getenv("LC3_RTL_DIR"))
+
+    additional_tops = env_words("EXTRA_VOPT_TOPS")
+
+    # Resolve user-provided source paths before entering
+    # the temporary compilation directory.
+    os.environ["EXTRA_SV_SOURCES"] = " ".join(
+        shlex.quote(str(p)) for p in extra_sources()
+    )
+
+except ValueError as exc:
+    ap.error(str(exc))
 
 args.out_root = args.out_root.resolve()
 args.out_root.mkdir(parents=True, exist_ok=True)
@@ -54,6 +68,28 @@ print("MODE:", "CHARACTERIZATION" if args.characterize
 
 timings = {}
 known_issue = False
+
+test_results = {}
+test_failures = []
+coverage_scope = "NOT_MERGED"
+
+
+def write_status(status, reason=""):
+    result = {
+        "mode": "CHARACTERIZATION" if args.characterize else "STRICT",
+        "status": status,
+        "reason": reason,
+        "seed": args.seed,
+        "tests": test_results,
+        "coverage_scope": coverage_scope,
+        "timings_seconds": timings,
+        "total_wall_seconds": time.perf_counter() - start
+    }
+
+    (work / "regression_status.json").write_text(
+        json.dumps(result, indent=2) + "\n"
+    )
+
 
 def require(condition, message):
     if not condition:
@@ -91,10 +127,7 @@ def validate(log, exhaustive):
     errors, fatals = read_sim_summary(log)
     require(fatals == 0, "UVM fatal")
 
-    if errors:
-        require(args.characterize,
-                "Strict regression has UVM errors")
-
+    if errors and args.characterize:
         reports = re.findall(
             r"^# UVM_ERROR .*control_env\.scoreboard "
             r"\[CONTROL_MISMATCH\] expected: ([^\n]+)\n"
@@ -194,7 +227,11 @@ def validate(log, exhaustive):
         require("Completed 300 clocks" in log,
                 "Directed test did not finish")
 
-    print("CHECKING: KNOWN_ISSUE" if errors else "CHECKING: PASS")
+    if errors:
+        print("CHECKING: KNOWN_ISSUE" if args.characterize
+              else "CHECKING: FAIL")
+    else:
+        print("CHECKING: PASS")
 
     for line in log.splitlines():
         if any(k in line for k in (
@@ -210,11 +247,17 @@ def validate(log, exhaustive):
         )):
             print(line)
 
+    require(
+        args.characterize or errors == 0,
+        f"Strict regression has {errors} UVM errors"
+    )
+
+
 try:
     run("COMPILE", [
         sys.executable, str(sim / "run.py"),
         "--rtl-dir", str(rtl),
-        "--uvmf-home", os.environ["UVMF_HOME"],
+        "--uvmf-home", str(uvmf),
         "--questa-home", str(questa),
         "--out", str(work),
         "--timeout", str(args.timeout),
@@ -229,7 +272,7 @@ try:
     run("OPTIMIZE", [
         str(questa / "bin/vopt"),
         "-L", str(questa / "uvm-1.2"),
-        "hdl_top", "hvl_top",
+        "hdl_top", "hvl_top", *additional_tops,
         "-o", "lc3_compete_opt"
     ], work / "optimize.log")
 
@@ -269,14 +312,80 @@ try:
             f"{{{ucdb}}}; run -all; quit -code 0"
         ]
 
-        run(label, cmd, logfile)
+        record = {
+            "status": "FAIL",
+            "ucdb_included": False
+        }
 
-        validate(logfile.read_text(), label == "exhaustive")
+        test_results[label] = record
 
-        require(ucdb.is_file() and ucdb.stat().st_size > 0,
-                f"Missing UCDB: {label}")
+        try:
+            run(label, cmd, logfile)
 
-        databases.append(ucdb)
+            log = logfile.read_text()
+
+            errors, fatals = read_sim_summary(log)
+
+            record["uvm_errors"] = errors
+            record["uvm_fatals"] = fatals
+
+            require(fatals == 0, "UVM fatal")
+
+            # A database is eligible for diagnostic collection
+            # only after a normal, completed simulation.
+            if label == "exhaustive":
+                marker = r"^# UVM_INFO .*\[LC3_ENUM_DONE\] expected="
+            else:
+                marker = (
+                    r"^# UVM_INFO .*\[LC3_SMOKE\] "
+                    r"Completed 300 clocks;"
+                )
+
+            require(
+                re.search(marker, log, re.M),
+                "Missing test completion marker"
+            )
+
+            require(
+                ucdb.is_file() and ucdb.stat().st_size > 0,
+                f"Missing UCDB: {label}"
+            )
+
+            # Preserve coverage even when functional checking fails.
+            # Such data is diagnostic, never a sign-off PASS.
+            databases.append(ucdb)
+            record["ucdb_included"] = True
+
+            validate(log, label == "exhaustive")
+
+            record["status"] = (
+                "KNOWN_ISSUE" if errors else "PASS"
+            )
+
+        except (
+            RuntimeError,
+            OSError,
+            ValueError,
+            subprocess.SubprocessError
+        ) as exc:
+            record["reason"] = str(exc)
+            test_failures.append(label)
+
+            print(f"TEST FAILED: {label}: {exc}")
+            print("Continuing with remaining tests.")
+
+    print("\n===== TEST OUTCOMES =====")
+
+    for label, record in test_results.items():
+        print(
+            label,
+            record["status"],
+            "UCDB included=" + str(record["ucdb_included"])
+        )
+
+    print(f"UCDB INPUTS: {len(databases)}/{len(tests)}")
+
+    require(databases, "No completed-test UCDBs available")
 
     merged = work / "merged.ucdb"
 
@@ -294,6 +403,27 @@ try:
     require(merged.is_file() and merged.stat().st_size > 0,
             "Missing merged coverage")
 
+    coverage_scope = (
+        "ALL_COMPLETED_TESTS"
+        if len(databases) == len(tests)
+        else "PARTIAL_DIAGNOSTIC"
+    )
+
+    print("COVERAGE SCOPE:", coverage_scope)
+
+    summary = work / "coverage_summary.txt"
+
+    run("SUMMARY", [
+        str(questa / "bin/vcover"),
+        "report", "-cvg",
+        "-output", str(summary), str(merged)
+    ], work / "summary.log")
+
+    require(summary.is_file() and summary.stat().st_size > 0,
+            "Missing coverage summary")
+
+    # Internal exact-bin gate. Do not include this detailed
+    # diagnostic report in the course submission.
     report = work / "coverage_details.txt"
 
     run("REPORT", [
@@ -330,14 +460,30 @@ try:
     print(f"TOTAL WALL TIME: {time.perf_counter()-start:.3f} s")
     print("OUTPUT:", work)
 
+    require(
+        len(databases) == len(tests),
+        "Incomplete coverage database collection"
+    )
+
+    require(
+        not test_failures,
+        "Failed tests: " + ", ".join(test_failures)
+    )
+
     if known_issue or args.characterize:
+        write_status(
+            "CHARACTERIZATION",
+            "Not final verification sign-off"
+        )
         print("CHARACTERIZATION COMPLETE — NOT FINAL SIGN-OFF")
         sys.exit(2)
 
+    write_status("PASS")
     print("STRICT REGRESSION: PASS")
 
 except (RuntimeError, OSError, ValueError,
         subprocess.SubprocessError) as exc:
+    write_status("FAIL", str(exc))
     print("REGRESSION FAIL:", exc)
     print("OUTPUT:", work)
     sys.exit(1)

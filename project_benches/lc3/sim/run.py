@@ -7,12 +7,15 @@ import re
 import subprocess
 import sys
 from sim_checks import read_sim_summary
+from sim_paths import (
+    resolve_tools, resolve_rtl, env_words, extra_sources
+)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--rtl-dir', type=Path, default=os.getenv('LC3_RTL_DIR'))
-    ap.add_argument('--uvmf-home', type=Path, default=os.getenv('UVMF_HOME'))
-    ap.add_argument('--questa-home', type=Path, default=os.getenv('QUESTA_HOME'))
+    ap.add_argument('--rtl-dir', type=Path, default=os.getenv('LC3_RTL_DIR') or None)
+    ap.add_argument('--uvmf-home', type=Path, default=os.getenv('UVMF_HOME') or None)
+    ap.add_argument('--questa-home', type=Path, default=os.getenv('QUESTA_HOME') or None)
     ap.add_argument('--out', type=Path, default=Path(__file__).parent / 'build')
     ap.add_argument('--compile-only', action='store_true')
     ap.add_argument('--seed', type=int, default=1)
@@ -23,12 +26,21 @@ def main():
     if args.timeout <= 0:
         ap.error('--timeout must be positive')
 
-    for key in ['rtl_dir', 'uvmf_home', 'questa_home']:
-        val = getattr(args, key)
-        if val is None or not val.is_dir():
-            ap.error('--' + key.replace('_', '-') + ' must name an existing directory')
-        setattr(args, key, val.resolve())
     root = Path(__file__).resolve().parents[3]
+
+    try:
+        args.questa_home, args.uvmf_home = resolve_tools(
+            args.questa_home, args.uvmf_home
+        )
+        args.rtl_dir = resolve_rtl(root, args.rtl_dir)
+
+        additional_sources = extra_sources()
+        additional_vlog_args = env_words("EXTRA_VLOG_ARGS")
+        additional_tops = env_words("EXTRA_VOPT_TOPS")
+
+    except ValueError as exc:
+        ap.error(str(exc))
+
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     vip = root / 'verification_ip'
@@ -65,6 +77,7 @@ def main():
                 'Mem_Access.v', 'WriteBack.v', 'Controller_Pipeline.v', 'TopLevelLC3.v']]
     top = root / 'project_benches/lc3/tb/testbench'
     sources += [top / 'lc3_dmem_model.sv', top / 'hdl_top.sv', top / 'hvl_top.sv']
+    sources += additional_sources
     for f in sources:
         if not f.is_file(): ap.error('Missing source: ' + str(f))
     def run(tool, argv, log):
@@ -77,9 +90,9 @@ def main():
             raise SystemExit(result.returncode)
     if not (out / 'work').exists(): run('vlib', ['work'], 'vlib.log')
     run('vlog', ['-sv', '-mfcu', '-timescale', '1ns/1ps', '-L', args.questa_home / 'uvm-1.2',
-                *['+incdir+' + str(x) for x in inc], *sources], 'compile.log')
+                *['+incdir+' + str(x) for x in inc], *additional_vlog_args, *sources], 'compile.log')
     if args.compile_only: return
-    run('vsim', ['-c', '-onfinish', 'stop', '-L', args.questa_home / 'uvm-1.2', 'hdl_top', 'hvl_top',
+    run('vsim', ['-c', '-onfinish', 'stop', '-L', args.questa_home / 'uvm-1.2', 'hdl_top', 'hvl_top', *additional_tops,
                  '-sv_seed', args.seed, '+UVM_TESTNAME=lc3_smoke_test',
                  '+LC3_CYCLES=' + str(args.cycles), '+UVM_VERBOSITY=UVM_LOW',
                  '-do', 'onerror {quit -code 2}; run -all; quit -code 0'], 'simulation.log')

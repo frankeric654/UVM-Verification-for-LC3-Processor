@@ -7,7 +7,10 @@ SIM_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT := $(abspath $(SIM_DIR)/../../..)
 
 PYTHON ?= python3
-RTL_DIR ?= $(if $(LC3_RTL_DIR),$(LC3_RTL_DIR),$(ROOT)/project_benches/project3/rtl)
+DEFAULT_RTL := $(if $(wildcard $(ROOT)/project_benches/lc3/rtl),$(ROOT)/project_benches/lc3/rtl,$(ROOT)/project_benches/project3/rtl)
+RTL_DIR ?= $(if $(LC3_RTL_DIR),$(LC3_RTL_DIR),$(DEFAULT_RTL))
+
+export EXTRA_SV_SOURCES EXTRA_VLOG_ARGS EXTRA_VOPT_TOPS
 OUT_ROOT ?= $(SIM_DIR)/build
 
 SEED ?= 1
@@ -17,8 +20,8 @@ TOOL_TIMEOUT ?= 300
 
 RUN = "$(PYTHON)" "$(SIM_DIR)/run.py" \
       --rtl-dir "$(RTL_DIR)" \
-      --uvmf-home "$(UVMF_HOME)" \
-      --questa-home "$(QUESTA_HOME)" --timeout "$(TOOL_TIMEOUT)"
+      $(if $(strip $(UVMF_HOME)),--uvmf-home "$(UVMF_HOME)") \
+      $(if $(strip $(QUESTA_HOME)),--questa-home "$(QUESTA_HOME)") --timeout "$(TOOL_TIMEOUT)"
 
 .PHONY: help compile smoke smoke-regress regress characterize
 
