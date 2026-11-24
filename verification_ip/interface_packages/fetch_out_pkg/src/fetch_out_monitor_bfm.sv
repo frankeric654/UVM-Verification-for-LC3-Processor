@@ -67,6 +67,10 @@ interface fetch_out_monitor_bfm
   // pragma tbx oneway proxy.notify_transaction                 
 
   // pragma uvmf custom interface_item_additional begin
+  clocking fetch_sample_cb @(posedge clock_i);
+    default input #1step;
+    input reset_i, pc_i, npc_out_i, instrmem_rd_i;
+  endclocking
   // pragma uvmf custom interface_item_additional end
   
   //******************************************************************                         
@@ -101,7 +105,6 @@ interface fetch_out_monitor_bfm
   initial begin                                                                             
     @go;                                                                                   
     forever begin                                                                        
-      @(posedge clock_i);  
       do_monitor( fetch_out_monitor_struct );
                                                                  
  
@@ -144,23 +147,21 @@ interface fetch_out_monitor_bfm
     //      fetch_out_monitor_struct.xyz = npc_out_i;  //    [15:0] 
     //      fetch_out_monitor_struct.xyz = instrmem_rd_i;  //     
     // pragma uvmf custom do_monitor begin
-    // One transaction per clock cycle outside reset, sampled at the falling
-    // edge (mid-cycle), i.e. the PC register value during that cycle and the
-    // instrmem_rd of that cycle. Same cycles as fetch_in_monitor_bfm, so the
-    // scoreboard sees exactly one actual per expected.
-    do @(negedge clock_i);
-    while (reset_i !== 1'b0);
+    // Sample stable inputs immediately before the rising edge.
+    // Use the same clock boundary as the DUT PC update.
+    do @(fetch_sample_cb);
+    while (fetch_sample_cb.reset_i !== 1'b0);
     // Four-state checks before the two-state conversion. pc and npc_out must
     // always be known after reset. instrmem_rd: 1 = read; 0 or Z = no read
     // (Z is allowed when Fetch is not reading); X is an error. fetch_model
     // returns 0 for "no read", so 0 and Z are both mapped to 0 explicitly.
-    if ($isunknown(pc_i) || $isunknown(npc_out_i))
-      proxy.report_xz($sformatf("pc=%h npc_out=%h", pc_i, npc_out_i));
-    if (instrmem_rd_i === 1'bx)
+    if ($isunknown(fetch_sample_cb.pc_i) || $isunknown(fetch_sample_cb.npc_out_i))
+      proxy.report_xz($sformatf("pc=%h npc_out=%h", fetch_sample_cb.pc_i, fetch_sample_cb.npc_out_i));
+    if (fetch_sample_cb.instrmem_rd_i === 1'bx)
       proxy.report_xz("instrmem_rd is X");
-    fetch_out_monitor_struct.pc          = pc_i;
-    fetch_out_monitor_struct.npc_out     = npc_out_i;
-    fetch_out_monitor_struct.instrmem_rd = (instrmem_rd_i === 1'b1);
+    fetch_out_monitor_struct.pc          = fetch_sample_cb.pc_i;
+    fetch_out_monitor_struct.npc_out     = fetch_sample_cb.npc_out_i;
+    fetch_out_monitor_struct.instrmem_rd = (fetch_sample_cb.instrmem_rd_i === 1'b1);
     // pragma uvmf custom do_monitor end
   endtask         
   
