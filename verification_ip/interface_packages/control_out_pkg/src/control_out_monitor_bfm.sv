@@ -36,6 +36,12 @@ interface control_out_monitor_bfm(control_out_if bus);
     initial forever begin
         @(sample_cb);
         cycle++;
+        // The first pre-edge sample precedes synchronous reset.
+        // Start functional checking after reset has taken effect.
+        if (cycle == 1 && sample_cb.reset === 1'b1) begin
+            $display("CONTROL_PRE_RESET: initial sample not compared");
+            continue;
+        end
         if (cycle != 0 && monitoring && monitor != null)
             monitor.notify_transaction(cycle, sample_cb.reset,
                 sample_cb.enable_updatePC, sample_cb.enable_fetch, sample_cb.enable_decode, sample_cb.enable_execute, sample_cb.enable_writeback, sample_cb.bypass_alu_1, sample_cb.bypass_alu_2, sample_cb.bypass_mem_1, sample_cb.bypass_mem_2, sample_cb.mem_state, sample_cb.br_taken);
