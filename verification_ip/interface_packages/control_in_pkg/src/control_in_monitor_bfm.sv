@@ -35,8 +35,9 @@ interface control_in_monitor_bfm(control_in_if bus);
 
     initial forever begin
         @(sample_cb);
-        if (cycle != 0 && monitoring && monitor != null)
+        if (cycle != 0 && monitoring && monitor != null) begin
             monitor.notify_transaction(cycle, reset_at_edge,
                 sample_cb.complete_data, sample_cb.complete_instr, sample_cb.IR, sample_cb.IR_Exec, sample_cb.Instr_dout, sample_cb.NZP, sample_cb.psr);
+        end
     end
 endinterface

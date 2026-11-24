@@ -1,12 +1,32 @@
 class control_in_coverage extends uvm_subscriber #(control_in_transaction);
     `uvm_component_utils(control_in_coverage)
     int unsigned sampled_cycles;
+    int unsigned resets_seen;
+    int unsigned reset_count;
+    bit reset_was_high;
+    bit memory_first_after_reset;
     covergroup input_coverage with function sample(control_in_transaction t,
         bit use_sr1, bit use_sr2, bit writes_dr, bit load_producer);
         option.per_instance = 1;
         cp_reset: coverpoint t.reset;
         cp_complete_instr: coverpoint t.complete_instr iff (!t.reset);
         cp_complete_data: coverpoint t.complete_data iff (!t.reset);
+        cp_reset_instr: coverpoint t.IR_Exec[15:12] iff (t.reset) {
+            bins ld = {4'b0010};
+            bins ldr = {4'b0110};
+            bins ldi = {4'b1010};
+            bins st = {4'b0011};
+            bins str = {4'b0111};
+            bins sti = {4'b1011};
+        }
+        cp_reset_count: coverpoint reset_count {
+            bins one = {1};
+            bins two = {2};
+            bins three_plus = {[3:$]};
+        }
+        cp_reset_corner: coverpoint memory_first_after_reset {
+            bins first_memory_after_reset = {1'b1};
+        }
         cp_opcode: coverpoint t.Instr_dout[15:12] iff (!t.reset && t.complete_instr) {
             bins supported[] = {0,1,2,3,5,6,7,9,10,11,12,14};
         }
@@ -39,6 +59,14 @@ class control_in_coverage extends uvm_subscriber #(control_in_transaction);
 
     virtual function void write(control_in_transaction t);
         bit use_sr1, use_sr2, writes_dr, load_producer;
+        if (t.reset && !reset_was_high) begin
+            reset_count++;
+            resets_seen++;
+        end
+        if (!t.reset && reset_was_high)
+            memory_first_after_reset =
+                t.IR_Exec[15:12] inside {4'b0010,4'b0110,4'b1010,4'b0011,4'b0111,4'b1011};
+        reset_was_high = t.reset;
         use_sr1 = t.IR[15:12] inside {1,5,6,7,9,12};
         use_sr2 = t.IR[15:12] inside {3,7,11} ||
                   (t.IR[15:12] inside {1,5} && !t.IR[5]);
