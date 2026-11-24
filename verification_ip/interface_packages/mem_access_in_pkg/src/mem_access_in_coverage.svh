@@ -90,23 +90,26 @@ class mem_access_in_coverage extends uvm_subscriber #(mem_access_in_transaction)
                   iff (coverage_trans.mem_state == 2'd2);
 
         cp_mem_state_trans : coverpoint coverage_trans.mem_state {
-            bins idle_to_indirect = (2'd3 => 2'd0);
-            bins idle_to_direct = (2'd3 => 2'd1);
-            bins idle_to_store = (2'd3 => 2'd2);
-            bins indirect_wait = (2'd0 => 2'd0);
-            bins indirect_done = (2'd0 => 2'd3);
-            bins indirect_to_direct = (2'd0 => 2'd1);
-            bins indirect_to_store = (2'd0 => 2'd2);
-            bins direct_wait = (2'd1 => 2'd1);
-            bins direct_done = (2'd1 => 2'd3);
+            // 0: data read, 1: pointer read, 2: write, 3: idle.
+            bins idle_to_direct   = (2'd3 => 2'd0);
+            bins idle_to_indirect = (2'd3 => 2'd1);
+            bins idle_to_store    = (2'd3 => 2'd2);
+            bins idle_wait        = (2'd3 => 2'd3);
+
+            bins direct_wait      = (2'd0 => 2'd0);
+            bins direct_done      = (2'd0 => 2'd3);
+
+            bins indirect_wait      = (2'd1 => 2'd1);
+            bins indirect_to_direct = (2'd1 => 2'd0);
+            bins indirect_to_store  = (2'd1 => 2'd2);
+
             bins store_wait = (2'd2 => 2'd2);
             bins store_done = (2'd2 => 2'd3);
-            bins store_to_indirect = (2'd2 => 2'd0);
-            bins store_to_direct = (2'd2 => 2'd1);
-            bins idle_wait = (2'd3 => 2'd3);
+
             illegal_bins illegal_transitions =
                 (2'd0 => 2'd1), (2'd0 => 2'd2),
-                (2'd1 => 2'd3), (2'd2 => 2'd0), (2'd2 => 2'd1);
+                (2'd1 => 2'd3), (2'd2 => 2'd0),
+                (2'd2 => 2'd1);
         }
 
         cp_mem_state_path : coverpoint state_path {
