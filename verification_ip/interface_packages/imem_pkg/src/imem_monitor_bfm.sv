@@ -84,10 +84,12 @@ interface imem_monitor_bfm
 
   // Record the request (if any) of the cycle being sampled. Four-state checks
   // happen here, before anything is converted to two-state values:
-  // instrmem_rd may be 0 or Z when there is no request; X is an error.
+  // instrmem_rd must be a known 0 or 1 outside reset.
   function void note_request();
-    if (sample_cb.instrmem_rd_i === 1'bx)
-      proxy.report_protocol("instrmem_rd is X");
+    if ($isunknown(sample_cb.instrmem_rd_i))
+      proxy.report_protocol($sformatf(
+        "instrmem_rd contains X/Z: %b",
+        sample_cb.instrmem_rd_i));
 
     req_pending = (sample_cb.instrmem_rd_i === 1'b1);
 

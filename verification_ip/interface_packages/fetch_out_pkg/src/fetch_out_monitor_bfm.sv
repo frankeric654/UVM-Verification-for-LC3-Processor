@@ -151,14 +151,15 @@ interface fetch_out_monitor_bfm
     // Use the same clock boundary as the DUT PC update.
     do @(fetch_sample_cb);
     while (fetch_sample_cb.reset_i !== 1'b0);
-    // Four-state checks before the two-state conversion. pc and npc_out must
-    // always be known after reset. instrmem_rd: 1 = read; 0 or Z = no read
-    // (Z is allowed when Fetch is not reading); X is an error. fetch_model
-    // returns 0 for "no read", so 0 and Z are both mapped to 0 explicitly.
+    // Four-state checks before the two-state conversion.
+    // After reset, instrmem_rd must be a known 0 or 1.
+    // Instructor clarification: inactive instrmem_rd is 0, not Z.
     if ($isunknown(fetch_sample_cb.pc_i) || $isunknown(fetch_sample_cb.npc_out_i))
       proxy.report_xz($sformatf("pc=%h npc_out=%h", fetch_sample_cb.pc_i, fetch_sample_cb.npc_out_i));
-    if (fetch_sample_cb.instrmem_rd_i === 1'bx)
-      proxy.report_xz("instrmem_rd is X");
+    if ($isunknown(fetch_sample_cb.instrmem_rd_i))
+      proxy.report_xz($sformatf(
+        "instrmem_rd contains X/Z: %b",
+        fetch_sample_cb.instrmem_rd_i));
     fetch_out_monitor_struct.pc          = fetch_sample_cb.pc_i;
     fetch_out_monitor_struct.npc_out     = fetch_sample_cb.npc_out_i;
     fetch_out_monitor_struct.instrmem_rd = (fetch_sample_cb.instrmem_rd_i === 1'b1);
