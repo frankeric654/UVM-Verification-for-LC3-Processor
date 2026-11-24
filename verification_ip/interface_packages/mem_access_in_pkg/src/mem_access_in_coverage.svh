@@ -41,7 +41,8 @@ class mem_access_in_coverage extends uvm_subscriber #(mem_access_in_transaction)
             bins all_ones = {16'hFFFF};
             bins pattern_5555 = {16'h5555};
             bins pattern_aaaa = {16'hAAAA};
-            illegal_bins unknown_store = default;
+            illegal_bins unknown_store = default
+                iff (coverage_trans.mem_state === 2'd2);
         }
         cp_dmem_dout : coverpoint coverage_trans.Data_dout {
             bins zero = {16'h0000};
