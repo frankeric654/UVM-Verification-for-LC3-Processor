@@ -37,6 +37,34 @@ class fetch_in_transaction_coverage  extends uvm_subscriber #(.T(fetch_in_transa
     // pragma uvmf custom covergroup end
   endgroup
 
+  covergroup fetch_in_behavior_cg;
+    option.per_instance = 1;
+
+    // Target 3.1: PC-update and fetch-enable combinations.
+    cp_update: coverpoint coverage_trans.enable_updatePC;
+    cp_fetch: coverpoint coverage_trans.enable_fetch;
+
+    cx_update_fetch: cross cp_update, cp_fetch;
+
+    // Target 3.2: sequential update and branch redirect.
+    cp_update_kind: coverpoint coverage_trans.br_taken
+      iff (coverage_trans.enable_updatePC) {
+        bins sequential = {0};
+        bins redirect = {1};
+    }
+
+    // Target address is meaningful only during a redirect.
+    cp_target: coverpoint coverage_trans.taddr
+      iff (coverage_trans.enable_updatePC &&
+           coverage_trans.br_taken) {
+        bins zero = {16'h0000};
+        bins below_reset = {[16'h0001:16'h2fff]};
+        bins reset_vector = {16'h3000};
+        bins above_reset = {[16'h3001:16'hfffe]};
+        bins maximum = {16'hffff};
+    }
+  endgroup
+
   // ****************************************************************************
   // FUNCTION : new()
   // This function is the standard SystemVerilog constructor.
@@ -44,6 +72,7 @@ class fetch_in_transaction_coverage  extends uvm_subscriber #(.T(fetch_in_transa
   function new(string name="", uvm_component parent=null);
     super.new(name,parent);
     fetch_in_transaction_cg=new;
+    fetch_in_behavior_cg=new;
   endfunction
 
   // ****************************************************************************
@@ -64,12 +93,21 @@ class fetch_in_transaction_coverage  extends uvm_subscriber #(.T(fetch_in_transa
     `uvm_info("COV","Received transaction",UVM_HIGH);
     coverage_trans = t;
     fetch_in_transaction_cg.sample();
+
+    fetch_in_behavior_cg.sample();
+
     sample_count++;
   endfunction
 
 
   virtual function void report_phase(uvm_phase phase);
     super.report_phase(phase);
+
+    `uvm_info("FETCH_TARGET_COV",
+      $sformatf("fetch_in: functional coverage=%0.2f%%",
+        fetch_in_behavior_cg.get_inst_coverage()),
+      UVM_LOW)
+
     `uvm_info("FETCH_COV",
       $sformatf("fetch_in: samples=%0d coverage=%0.2f%%",
         sample_count,
