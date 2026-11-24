@@ -69,6 +69,10 @@ interface fetch_in_monitor_bfm
   // pragma tbx oneway proxy.notify_transaction                 
 
   // pragma uvmf custom interface_item_additional begin
+  clocking fetch_sample_cb @(posedge clock_i);
+    default input #1step;
+    input reset_i, enable_updatePC_i, enable_fetch_i, br_taken_i, taddr_i;
+  endclocking
   // pragma uvmf custom interface_item_additional end
   
   //******************************************************************                         
@@ -103,7 +107,6 @@ interface fetch_in_monitor_bfm
   initial begin                                                                             
     @go;                                                                                   
     forever begin                                                                        
-      @(posedge clock_i);  
       do_monitor( fetch_in_monitor_struct );
                                                                  
  
@@ -148,23 +151,22 @@ interface fetch_in_monitor_bfm
     //      fetch_in_monitor_struct.xyz = br_taken_i;  //     
     //      fetch_in_monitor_struct.xyz = taddr_i;  //    [15:0] 
     // pragma uvmf custom do_monitor begin
-    // One transaction per clock cycle outside reset, sampled at the falling
-    // edge (mid-cycle) so the controller's combinational outputs and Execute's
-    // pcout have settled. These are the Fetch inputs for that cycle.
-    do @(negedge clock_i);
-    while (reset_i !== 1'b0);
+    // Sample stable inputs immediately before the rising edge.
+    // Use the same clock boundary as the DUT PC update.
+    do @(fetch_sample_cb);
+    while (fetch_sample_cb.reset_i !== 1'b0);
     // Four-state checks before the two-state conversion. The control inputs
     // must always be known; taddr only matters when a taken branch updates the
     // PC, so it is only checked then.
-    if ($isunknown({enable_updatePC_i, enable_fetch_i, br_taken_i}))
+    if ($isunknown({fetch_sample_cb.enable_updatePC_i, fetch_sample_cb.enable_fetch_i, fetch_sample_cb.br_taken_i}))
       proxy.report_xz($sformatf("enable_updatePC=%b enable_fetch=%b br_taken=%b",
-                                enable_updatePC_i, enable_fetch_i, br_taken_i));
-    if ((enable_updatePC_i === 1'b1) && (br_taken_i === 1'b1) && $isunknown(taddr_i))
-      proxy.report_xz($sformatf("taddr=%h has X/Z while a taken branch updates the PC", taddr_i));
-    fetch_in_monitor_struct.enable_updatePC = (enable_updatePC_i === 1'b1);
-    fetch_in_monitor_struct.enable_fetch    = (enable_fetch_i === 1'b1);
-    fetch_in_monitor_struct.br_taken        = (br_taken_i === 1'b1);
-    fetch_in_monitor_struct.taddr           = taddr_i;
+                                fetch_sample_cb.enable_updatePC_i, fetch_sample_cb.enable_fetch_i, fetch_sample_cb.br_taken_i));
+    if ((fetch_sample_cb.enable_updatePC_i === 1'b1) && (fetch_sample_cb.br_taken_i === 1'b1) && $isunknown(fetch_sample_cb.taddr_i))
+      proxy.report_xz($sformatf("taddr=%h has X/Z while a taken branch updates the PC", fetch_sample_cb.taddr_i));
+    fetch_in_monitor_struct.enable_updatePC = (fetch_sample_cb.enable_updatePC_i === 1'b1);
+    fetch_in_monitor_struct.enable_fetch    = (fetch_sample_cb.enable_fetch_i === 1'b1);
+    fetch_in_monitor_struct.br_taken        = (fetch_sample_cb.br_taken_i === 1'b1);
+    fetch_in_monitor_struct.taddr           = fetch_sample_cb.taddr_i;
     // pragma uvmf custom do_monitor end
   endtask         
   

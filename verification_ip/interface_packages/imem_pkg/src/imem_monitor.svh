@@ -32,6 +32,8 @@ class imem_monitor  extends uvmf_monitor_base #(
   // Protocol and X/Z problems found by imem_monitor_bfm while sampling.
   int unsigned protocol_errors = 0;
   int unsigned responses_observed = 0;
+  bit [63:0] stream_digest = 64'hCBF29CE484222325;
+
 
   function void note_observed_response();
     responses_observed++;
@@ -85,6 +87,10 @@ class imem_monitor  extends uvmf_monitor_base #(
  
     trans = new("trans");
     trans.from_monitor_struct(imem_monitor_struct);
+    stream_digest =
+      (stream_digest ^ {32'b0, trans.addr, trans.instr})
+      * 64'h00000100000001B3;
+
     trans.start_time = time_stamp;                                                          
     trans.end_time = $time;                                                                 
     time_stamp = trans.end_time; 

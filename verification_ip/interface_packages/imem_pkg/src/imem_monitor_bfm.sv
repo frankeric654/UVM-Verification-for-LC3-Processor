@@ -69,6 +69,12 @@ interface imem_monitor_bfm
   // pragma tbx oneway proxy.notify_transaction                 
 
   // pragma uvmf custom interface_item_additional begin
+  clocking sample_cb @(posedge clock_i);
+    default input #1step;
+    input reset_i, pc_i, instrmem_rd_i;
+    input Instr_dout_i, complete_instr_i;
+  endclocking
+
   // Request seen in the previous cycle that is waiting for its response.
   // Supported protocol: fixed one-cycle response latency (see imem_driver_bfm).
   // A request without a response in the next cycle is reported, never silently
@@ -78,14 +84,19 @@ interface imem_monitor_bfm
 
   // Record the request (if any) of the cycle being sampled. Four-state checks
   // happen here, before anything is converted to two-state values:
-  // instrmem_rd may be 0 or Z when there is no request; X is an error.
+  // instrmem_rd must be a known 0 or 1 outside reset.
   function void note_request();
-    if (instrmem_rd_i === 1'bx)
-      proxy.report_protocol("instrmem_rd is X");
-    req_pending = (instrmem_rd_i === 1'b1);
-    if (req_pending && $isunknown(pc_i))
-      proxy.report_protocol($sformatf("fetch request with unknown pc=%h", pc_i));
-    req_addr = pc_i;
+    if ($isunknown(sample_cb.instrmem_rd_i))
+      proxy.report_protocol($sformatf(
+        "instrmem_rd contains X/Z: %b",
+        sample_cb.instrmem_rd_i));
+
+    req_pending = (sample_cb.instrmem_rd_i === 1'b1);
+
+    if (req_pending && $isunknown(sample_cb.pc_i))
+      proxy.report_protocol("IMEM request PC contains X/Z");
+
+    req_addr = sample_cb.pc_i;
   endfunction
   // pragma uvmf custom interface_item_additional end
   
@@ -121,7 +132,6 @@ interface imem_monitor_bfm
   initial begin                                                                             
     @go;                                                                                   
     forever begin                                                                        
-      @(posedge clock_i);  
       do_monitor( imem_monitor_struct );
                                                                  
  
@@ -164,32 +174,27 @@ interface imem_monitor_bfm
     //      imem_monitor_struct.xyz = Instr_dout_i;  //    [15:0] 
     //      imem_monitor_struct.xyz = complete_instr_i;  //     
     // pragma uvmf custom do_monitor begin
-    // One transaction per observed valid response window (not proof that
-    // Decode latched it or that held data was refreshed for this request):
-    //   addr  = pc of the request (cycle k, instrmem_rd == 1)
-    //   instr = Instr_dout in the response cycle k+1 (complete_instr == 1)
-    // All signals are sampled at the falling edge, after the LC3 and the
-    // responder have settled. Back-to-back fetches are tracked: the request of
-    // the current cycle is recorded before returning. A held complete=1 does
-    // not distinguish stale data; the v3 smoke CSV checker independently
-    // checks the actual pin-word stream against the directed stimulus contract.
+    // Match each rising-edge request to the following
+    // rising-edge response sample. Capture the next request
+    // before returning, including back-to-back transfers.
+    // This observes memory responses, not instruction retirement.
     forever begin
-      @(negedge clock_i);
-      if (reset_i !== 1'b0) begin
+      @(sample_cb);
+      if (sample_cb.reset_i !== 1'b0) begin
         req_pending = 1'b0;
       end else begin
         if (req_pending) begin
-          if (complete_instr_i === 1'b1) begin
-            if ($isunknown(Instr_dout_i))
-              proxy.report_protocol($sformatf("Instr_dout=%h has X/Z in the response to pc=%h", Instr_dout_i, req_addr));
+          if (sample_cb.complete_instr_i === 1'b1) begin
+            if ($isunknown(sample_cb.Instr_dout_i))
+              proxy.report_protocol($sformatf("Instr_dout=%h has X/Z in the response to pc=%h", sample_cb.Instr_dout_i, req_addr));
             imem_monitor_struct.addr  = req_addr;
-            imem_monitor_struct.instr = Instr_dout_i;
+            imem_monitor_struct.instr = sample_cb.Instr_dout_i;
             proxy.note_observed_response();
             note_request();
             break;
           end
           proxy.report_protocol($sformatf("complete_instr is not valid in the fixed response cycle for pc=%h (complete_instr=%b)",
-                                          req_addr, complete_instr_i));
+                                          req_addr, sample_cb.complete_instr_i));
         end
         note_request();
       end

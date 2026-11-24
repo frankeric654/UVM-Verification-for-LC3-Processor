@@ -19,6 +19,11 @@ class fetch_out_transaction_coverage  extends uvm_subscriber #(.T(fetch_out_tran
   `uvm_component_utils( fetch_out_transaction_coverage )
 
   T coverage_trans;
+  int unsigned sample_count = 0;
+  bit previous_valid = 0;
+  bit [15:0] previous_pc;
+  bit [15:0] pc_delta;
+
 
   // pragma uvmf custom class_item_additional begin
   // pragma uvmf custom class_item_additional end
@@ -35,6 +40,31 @@ class fetch_out_transaction_coverage  extends uvm_subscriber #(.T(fetch_out_tran
     // pragma uvmf custom covergroup end
   endgroup
 
+  covergroup fetch_out_behavior_cg;
+    option.per_instance = 1;
+
+    // Target 3.3: observed PC movement between samples.
+    cp_pc_motion: coverpoint pc_delta iff (previous_valid) {
+        bins hold = {16'h0000};
+        bins increment = {16'h0001};
+        bins other = {[16'h0002:16'hffff]};
+    }
+
+    // Target 3.4: instruction-memory request activity.
+    cp_read: coverpoint coverage_trans.instrmem_rd {
+        bins inactive = {0};
+        bins active = {1};
+    }
+
+    cp_read_transition:
+      coverpoint coverage_trans.instrmem_rd {
+        bins start_read = (0 => 1);
+        bins stop_read = (1 => 0);
+        bins continue_read = (1 => 1);
+        bins continue_idle = (0 => 0);
+    }
+  endgroup
+
   // ****************************************************************************
   // FUNCTION : new()
   // This function is the standard SystemVerilog constructor.
@@ -42,6 +72,7 @@ class fetch_out_transaction_coverage  extends uvm_subscriber #(.T(fetch_out_tran
   function new(string name="", uvm_component parent=null);
     super.new(name,parent);
     fetch_out_transaction_cg=new;
+    fetch_out_behavior_cg=new;
   endfunction
 
   // ****************************************************************************
@@ -62,6 +93,29 @@ class fetch_out_transaction_coverage  extends uvm_subscriber #(.T(fetch_out_tran
     `uvm_info("COV","Received transaction",UVM_HIGH);
     coverage_trans = t;
     fetch_out_transaction_cg.sample();
+
+    pc_delta = coverage_trans.pc - previous_pc;
+    fetch_out_behavior_cg.sample();
+    previous_pc = coverage_trans.pc;
+    previous_valid = 1;
+
+    sample_count++;
+  endfunction
+
+
+  virtual function void report_phase(uvm_phase phase);
+    super.report_phase(phase);
+
+    `uvm_info("FETCH_TARGET_COV",
+      $sformatf("fetch_out: functional coverage=%0.2f%%",
+        fetch_out_behavior_cg.get_inst_coverage()),
+      UVM_LOW)
+
+    `uvm_info("FETCH_COV",
+      $sformatf("fetch_out: samples=%0d coverage=%0.2f%%",
+        sample_count,
+        fetch_out_transaction_cg.get_inst_coverage()),
+      UVM_LOW)
   endfunction
 
 endclass

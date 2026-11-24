@@ -23,7 +23,7 @@ ECE 748 Project 3 / Group 6. **Reference source only**: these files are provided
 2. The original bench also requires 8 instructor LC3 RTL files and 8 instructor `lc3_prediction_pkg` source files. Obtain them from authorized course materials and do not publish them as part of this reference. A UVMF example module `verilog_dut.v` is not part of those instructor files and is not required by the validated Makefile path.
 3. The standalone `project_benches/imem_fetch_sandbox` contains its own UVMF bench structure. Do not replace the team's `project_benches/lc3`, `lc3_env`, or `regress.sh` with it. Reuse the responder, coverage collector, instruction sequences and tests as appropriate.
 4. The sandbox uses a simplified data-memory interface (`Data_dout=0`, `complete_data=1`), not the final data-memory responder. The team must implement/integrate dmem and stage-level checking independently.
-5. The instructor DUT/reference model use `instrmem_rd=0` when Fetch is disabled, while the written DesignSpec says high-impedance `Z`. This specification discrepancy remains unresolved.
+5. The instructor clarified that inactive `instrmem_rd` must be 0. Commit `5fa986e` rejects X/Z in the integrated monitors. The standalone sandbox remains a historical reference.
 6. The standalone `sim/Makefile` references omitted dependencies. The generated `sim/compile.do` is **not** a validated build entrypoint. There are **no runnable wrapper scripts in this reference ZIP**. Integrators must adjust compile order, bindings and test setup for the team's actual environment.
 
 ## Suggested reuse

@@ -109,10 +109,10 @@ extends uvmf_environment_configuration_base;
   // Interface initialization for local agents
      fetch_in_agent_config.initialize( interface_activity[0], {environment_path,".fetch_in_agent"}, interface_names[0]);
      fetch_in_agent_config.initiator_responder = INITIATOR;
-     // fetch_in_agent_config.has_coverage = 1;
+     fetch_in_agent_config.has_coverage = 1;
      fetch_out_agent_config.initialize( interface_activity[1], {environment_path,".fetch_out_agent"}, interface_names[1]);
      fetch_out_agent_config.initiator_responder = INITIATOR;
-     // fetch_out_agent_config.has_coverage = 1;
+     fetch_out_agent_config.has_coverage = 1;
 
 
 

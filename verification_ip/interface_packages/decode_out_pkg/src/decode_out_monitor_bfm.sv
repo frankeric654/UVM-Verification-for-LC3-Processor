@@ -2,6 +2,10 @@ interface decode_out_monitor_bfm(
     decode_out_if.MONITOR bfm
 );
 
+
+    bit quiet_decode;
+    initial quiet_decode = $test$plusargs("LC3_QUIET_DECODE");
+
     // low level monitor task to sample the interface signals on each clock cycle
     task automatic monitor(
         // outputs to monitor class
@@ -25,7 +29,7 @@ interface decode_out_monitor_bfm(
         W_control_o   = bfm.W_control;
         Mem_control_o = bfm.Mem_control;
         // print statement to send info about the recovered signal to terminal
-        $display("Decode Out Monitor BFM: IR = %h, npc_out = %h, E_control = %b, W_control = %b, Mem_control = %b",
+        if (!quiet_decode) $display("Decode Out Monitor BFM: IR = %h, npc_out = %h, E_control = %b, W_control = %b, Mem_control = %b",
             IR_o, npc_out_o, E_control_o, W_control_o, Mem_control_o);
         
     endtask

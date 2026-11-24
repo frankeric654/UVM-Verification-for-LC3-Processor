@@ -31,5 +31,6 @@ not the final integrated Group 6 testbench.
 - Include lc3_prediction_pkg in the compilation dependencies.
 - Fetch agents are passive monitoring agents.
 - Final integration and regression must be validated separately.
-- Known discrepancy: inactive instrmem_rd=0 in the provided
-  DUT/model, while the written specification requires Z.
+- Instructor clarification: inactive instrmem_rd must be 0.
+  Integrated monitors reject X/Z as of 5fa986e.
+- Current integrated validation: [FETCH_VALIDATION.md](../lc3/FETCH_VALIDATION.md).

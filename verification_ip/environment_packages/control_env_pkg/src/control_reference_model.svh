@@ -13,12 +13,15 @@ class control_reference_model extends uvm_object;
     } instruction_t;
 
     protected bit seen_reset;
+    protected bit zero_word_nop;
+    protected bit startup_pending;
     protected bit fe1_valid, fe2_valid, dec_valid, exe_valid;
     protected memory_state_t memory_state;
 
     function new(string name = "control_reference_model");
         super.new(name);
         seen_reset = 0;
+        zero_word_nop = $test$plusargs("LC3_CONTROL_ZERO_NOP");
         memory_state = IDLE;
     endfunction
 
@@ -27,6 +30,10 @@ class control_reference_model extends uvm_object;
         d.opcode = ir[15:12];
         d.supported = d.opcode inside {0,1,2,3,5,6,7,9,10,11,12,14};
         d.control_op = d.opcode inside {0,12};
+        // Experimental RTL compatibility hypothesis.
+        // Strict instructor-model behavior remains the default.
+        if (zero_word_nop && ir === 16'h0000)
+            d.control_op = 0;
         d.memory_op = d.opcode inside {2,3,6,7,10,11};
         d.writes_dr = d.opcode inside {1,2,5,6,9,10,14};
         d.use_sr1 = d.opcode inside {1,5,6,7,9,12};
@@ -42,7 +49,8 @@ class control_reference_model extends uvm_object;
         seen_reset = 1;
         // Reset establishes PC. The first post-reset edge starts Fetch 2.
         // Equivalent to the supplied model's initial Fetch-1 priming call.
-        fe1_valid = 1;
+        fe1_valid = 0;
+        startup_pending = 1;
         fe2_valid = 0;
         dec_valid = 0;
         exe_valid = 0;
@@ -118,9 +126,14 @@ class control_reference_model extends uvm_object;
         // The supplied function omits this completion qualification.
         p.enable_updatePC = !stalled &&
                             ((!has_branch && t.complete_instr) || branch_taken);
-        p.enable_fetch = !stalled && next_fe2;
+        p.enable_fetch = !stalled && (next_fe2 || startup_pending);
         p.enable_decode = !stalled && next_dec;
-        p.enable_execute = !stalled && next_exe;
+        // Experimental compatibility behavior:
+        // A zero-word NOP does not activate Execute.
+        // Preserve internal pipeline validity tracking.
+        p.enable_execute = !stalled && next_exe &&
+                           !(zero_word_nop &&
+                             (t.IR === 16'h0000));
         p.enable_writeback = !stalled && exe_valid && executed.writes_dr;
         p.mem_state = memory_state[1:0];
 
@@ -136,6 +149,7 @@ class control_reference_model extends uvm_object;
                 p.bypass_alu_2 = !executed.memory_op;
             end
         end
+        startup_pending = 0;
         fe1_valid = next_fe1;
         fe2_valid = next_fe2;
         dec_valid = next_dec;
