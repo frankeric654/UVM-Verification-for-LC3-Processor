@@ -1,3 +1,67 @@
+# LC3 integration validation — November 24, 2026
+
+Validated infrastructure commit: `ce0b32c`.
+
+Environment: Questa 2025.1_1, UVM 1.2, UVMF 2023.4_2.
+Validation performed on NCSU Grendel.
+
+## Current characterization results
+
+- Compilation: 0 errors, 0 warnings.
+- Custom IMEM instruction coverage: 37960/37960.
+- Fetch behavior coverage: 24/24 merged bins.
+- Exhaustive Fetch scoreboard: 99895 matches, 0 mismatches.
+- IMEM protocol errors: 0.
+- All six scoreboards active.
+- Non-reset mismatches: 0 with experimental Control NOP mode.
+- Four known Control reset mismatches per test remain.
+- Simulator errors: 0.
+- Simulation warnings: 123 per full-regression test.
+- Total wall-clock regression time: 55.160 seconds.
+
+These are characterization results, not final verification sign-off.
+
+## Build and regression commands
+
+From project_benches/lc3/sim, with QUESTA_HOME and
+UVMF_HOME configured:
+
+| Command | Purpose |
+| --- | --- |
+| make compile | Compile all sources |
+| make smoke | Strict single-seed smoke |
+| make smoke-regress | Strict multi-seed smoke |
+| make baseline | Known-issue baseline check |
+| make regress | Strict full regression |
+| make characterize | Experimental full regression |
+| ./regress.sh | Strict reproducible regression |
+| ./regress.sh --characterize | Characterization run |
+| python3 test_sim_checks.py -v | Transcript checker tests |
+
+The standalone regress.sh exit statuses are:
+
+- 0: strict regression passed.
+- 1: regression failure.
+- 2: characterization completed; not final sign-off.
+
+GNU Make reports nonzero recipe exit statuses as errors.
+The completion marker and detailed results must also be checked.
+
+The regression preserves transcripts, individual UCDB files,
+merged.ucdb, coverage_details.txt and timing results.
+
+## Remaining integration blockers
+
+- Resolve Control reset and zero-word NOP semantics.
+- Resolve MemAccess coverage transition-bin conflicts.
+- Integrate the required DMEM UVM responder.
+- Revalidate coverage against the agreed course testplan.
+- Perform strict regression after team integration.
+
+---
+
+## Historical validation record
+
 # Integration validation — November 22, 2026
 
 Base: team main `4ff9e1245e02f80313bc7577890f627e1bc79e69`.

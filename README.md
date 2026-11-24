@@ -179,4 +179,10 @@ Accept invitation
   -> Sync your working branch
 ```
 
+## Integrated LC3 regression
 
+See [LC3 validation and build instructions](docs/lc3/VALIDATION.md)
+for the current validation status, Makefile commands, regression
+entry points and known integration blockers.
+
+The characterization mode is not final verification sign-off.
