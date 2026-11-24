@@ -1,0 +1,337 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sim_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+exec python3 - "$sim_dir" "$@" <<'PY'
+from pathlib import Path
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+start = time.perf_counter()
+sim = Path(sys.argv[1])
+repo = sim.parents[2]
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--characterize", action="store_true")
+args = ap.parse_args(sys.argv[2:])
+
+questa = Path(os.environ["QUESTA_HOME"])
+rtl = Path(os.environ.get(
+    "LC3_RTL_DIR",
+    str(repo / "project_benches/project3/rtl")
+)).resolve()
+
+(sim / "build").mkdir(exist_ok=True)
+
+work = Path(tempfile.mkdtemp(
+    prefix="regress.",
+    dir=sim / "build"
+))
+
+print("REGRESSION OUTPUT:", work, flush=True)
+print("MODE:", "CHARACTERIZATION" if args.characterize
+      else "STRICT", flush=True)
+
+timings = {}
+known_issue = False
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+def run(label, command, logfile):
+    t = time.perf_counter()
+
+    print(f"\n===== {label} =====", flush=True)
+
+    with logfile.open("w") as f:
+        result = subprocess.run(
+            command, cwd=work,
+            stdout=f, stderr=subprocess.STDOUT,
+            timeout=300
+        )
+
+    timings[label] = time.perf_counter() - t
+
+    print(f"{label}: {timings[label]:.3f} s", flush=True)
+
+    if result.returncode:
+        print(logfile.read_text()[-5000:])
+        raise RuntimeError(f"{label} failed")
+
+def one(pattern, log):
+    matches = re.findall(pattern, log, re.M)
+    require(len(matches) == 1, f"Invalid summary: {pattern}")
+    return matches[0]
+
+def validate(log, exhaustive):
+    global known_issue
+
+    errors = int(one(r"^# UVM_ERROR\s*:\s*(\d+)$", log))
+    fatals = int(one(r"^# UVM_FATAL\s*:\s*(\d+)$", log))
+
+    require(fatals == 0, "UVM fatal")
+    require(re.search(
+        r"^# Errors: 0, Warnings: \d+$", log, re.M
+    ), "Simulator errors or missing summary")
+
+    require(not re.search(
+        r"\*\* (?:Error|Fatal|Failure)\b", log
+    ), "Simulator error")
+
+    if errors:
+        require(args.characterize,
+                "Strict regression has UVM errors")
+
+        reports = re.findall(
+            r"^# UVM_ERROR .*control_env\.scoreboard "
+            r"\[CONTROL_MISMATCH\] expected: ([^\n]+)\n"
+            r"# actual:\s+([^\n]+)",
+            log, re.M
+        )
+
+        require(errors == len(reports) == 4,
+                "Unexpected UVM errors")
+
+        for cycle, (expected, actual) in enumerate(reports, 2):
+            e = dict(re.findall(r"(\w+)=(\S+)", expected))
+            a = dict(re.findall(r"(\w+)=(\S+)", actual))
+
+            required = {
+                "cycle": str(cycle),
+                "reset": "1",
+                "enable_updatePC": "0",
+                "enable_fetch": "0",
+                "enable_decode": "0",
+                "enable_execute": "0",
+                "enable_writeback": "0",
+                "bypass_alu_1": "0",
+                "bypass_alu_2": "0",
+                "bypass_mem_1": "0",
+                "bypass_mem_2": "0",
+                "mem_state": "11",
+                "br_taken": "0"
+            }
+
+            require(e == required, "Unknown reset prediction")
+            required["enable_fetch"] = "1"
+            require(a == required, "Unknown reset observation")
+
+        known_issue = True
+
+    f = one(
+        r"SCOREBOARD_RESULTS: +PREDICTED_TRANSACTIONS=(\d+) "
+        r"MATCHES=(\d+) MISMATCHES=0$", log
+    )
+
+    require(int(f[0]) == int(f[1]) > 0, "Fetch accounting")
+
+    for stage in ("decode", "mem_access"):
+        e, c = map(int, one(
+            rf"{stage}_env\.scoreboard \[SCOREBOARD_REPORT\]\s*\n"
+            r"#\s*\n"
+            r"# Expected transactions received: (\d+)\s*\n"
+            r"# Comparisons made: (\d+)\s*\n"
+            r"# Mismatches: 0\s*\n"
+            r"# Expected transactions remaining: 0$",
+            log
+        ))
+
+        require(e == c > 0, f"{stage} accounting")
+
+    e, a, m, skip = map(int, one(
+        r"\[EXE_SB\] Expected=(\d+) Actual=(\d+) Match=(\d+) "
+        r"Mismatch=0 Skipped=(\d+) NoExpected=0 Remaining=0$",
+        log
+    ))
+
+    require(e == a == m + skip and m > 0 and skip <= 1,
+            "Execute accounting")
+
+    pairs, checks, unchecked = map(int, one(
+        r"\[WB_SUMMARY\] pairs=(\d+) field_checks=(\d+) "
+        r"mismatches=0 unchecked_pairs=(\d+)$", log
+    ))
+
+    require(pairs > 0 and checks > 0 and unchecked <= 9,
+            "Writeback accounting")
+
+    e, a, c, m, bad = map(int, one(
+        r"\[CONTROL_SCOREBOARD\] expected=(\d+) actual=(\d+) "
+        r"compared=(\d+) matched=(\d+) mismatched=(\d+) pending=0$",
+        log
+    ))
+
+    require(e == a == c == m + bad and m > 0 and bad == errors,
+            "Control accounting")
+
+    if exhaustive:
+        require(re.search(
+            r"\[LC3_ENUM_DONE\] expected=37960 delivered=37960 "
+            r"passes=1 observed=\d+ protocol_errors=0 "
+            r"digest=[0-9a-fA-F]+", log
+        ), "Exhaustive stimulus incomplete")
+
+        require(
+            "instruction field combinations hit: 37960 of 37960" in log,
+            "Instruction coverage incomplete"
+        )
+    else:
+        require("Delivered=148 Expected=148" in log,
+                "Directed stimulus incomplete")
+        require("Completed 300 clocks" in log,
+                "Directed test did not finish")
+
+    print("CHECKING: KNOWN_ISSUE" if errors else "CHECKING: PASS")
+
+    for line in log.splitlines():
+        if any(k in line for k in (
+            "[LC3_ENUM_DONE] expected=",
+            "[FETCH_DIRECTED_DONE] Delivered=",
+            "[IMEM_COV] instruction",
+            "[FETCH_TARGET_COV] fetch",
+            "[CONTROL_SCOREBOARD] expected=",
+            "SCOREBOARD_RESULTS:",
+            "UVM_ERROR :",
+            "UVM_FATAL :",
+            "# Errors:"
+        )):
+            print(line)
+
+try:
+    run("COMPILE", [
+        sys.executable, str(sim / "run.py"),
+        "--rtl-dir", str(rtl),
+        "--uvmf-home", os.environ["UVMF_HOME"],
+        "--questa-home", str(questa),
+        "--out", str(work),
+        "--compile-only"
+    ], work / "build.log")
+
+    require(re.search(
+        r"^Errors: 0, Warnings: 0$",
+        (work / "compile.log").read_text(), re.M
+    ), "Compilation summary failed")
+
+    run("OPTIMIZE", [
+        str(questa / "bin/vopt"),
+        "-L", str(questa / "uvm-1.2"),
+        "hdl_top", "hvl_top",
+        "-o", "lc3_compete_opt"
+    ], work / "optimize.log")
+
+    databases = []
+
+    tests = [
+        ("exhaustive", "lc3_exhaustive_test", 500000),
+        ("directed", "lc3_fetch_target_test", 300)
+    ]
+
+    for label, test, cycles in tests:
+        out = work / label
+        out.mkdir()
+
+        ucdb = out / "coverage.ucdb"
+        logfile = out / "simulation.log"
+
+        cmd = [
+            str(questa / "bin/vsim"),
+            "-c", "-coverage", "-onfinish", "stop",
+            "-L", str(questa / "uvm-1.2"),
+            "lc3_compete_opt",
+            "-sv_seed", "1",
+            f"+UVM_TESTNAME={test}",
+            f"+LC3_CYCLES={cycles}",
+            "+UVM_VERBOSITY=UVM_LOW",
+            "+LC3_QUIET_DECODE"
+        ]
+
+        if args.characterize:
+            cmd.append("+LC3_CONTROL_ZERO_NOP")
+
+        cmd += [
+            "-do",
+            f"onerror {{quit -code 2}}; "
+            f"coverage save -onexit -testname {label} "
+            f"{{{ucdb}}}; run -all; quit -code 0"
+        ]
+
+        run(label, cmd, logfile)
+
+        validate(logfile.read_text(), label == "exhaustive")
+
+        require(ucdb.is_file() and ucdb.stat().st_size > 0,
+                f"Missing UCDB: {label}")
+
+        databases.append(ucdb)
+
+    merged = work / "merged.ucdb"
+
+    run("MERGE", [
+        str(questa / "bin/vcover"), "merge",
+        str(merged), *map(str, databases)
+    ], work / "merge.log")
+
+    require(
+        "Errors: 0, Warnings: 0" in
+        (work / "merge.log").read_text(),
+        "Coverage merge warning or error"
+    )
+
+    require(merged.is_file() and merged.stat().st_size > 0,
+            "Missing merged coverage")
+
+    report = work / "coverage_details.txt"
+
+    run("REPORT", [
+        str(questa / "bin/vcover"),
+        "report", "-cvg", "-details",
+        "-output", str(report), str(merged)
+    ], work / "report.log")
+
+    data = report.read_text()
+
+    for stage, total in (("in", 15), ("out", 9)):
+        pattern = (
+            rf"^\s*TYPE /fetch_{stage}_pkg/[^\n]*"
+            rf"/fetch_{stage}_behavior_cg[ \t]*\n"
+            r"[^\n]*\n"
+            r"\s*covered/total bins:\s*(\d+)\s+(\d+)"
+        )
+
+        rows = re.findall(pattern, data, re.M)
+
+        require(
+            rows and all(int(a) == int(b) == total
+                         for a, b in rows),
+            f"Fetch {stage} coverage not closed"
+        )
+
+        print(f"FETCH {stage.upper()}: {total}/{total}")
+
+    print("\n===== REGRESSION TIMINGS =====")
+
+    for label, elapsed in timings.items():
+        print(f"{label}: {elapsed:.3f} s")
+
+    print(f"TOTAL WALL TIME: {time.perf_counter()-start:.3f} s")
+    print("OUTPUT:", work)
+
+    if known_issue or args.characterize:
+        print("CHARACTERIZATION COMPLETE — NOT FINAL SIGN-OFF")
+        sys.exit(2)
+
+    print("STRICT REGRESSION: PASS")
+
+except (RuntimeError, OSError, ValueError,
+        subprocess.SubprocessError) as exc:
+    print("REGRESSION FAIL:", exc)
+    print("OUTPUT:", work)
+    sys.exit(1)
+PY
