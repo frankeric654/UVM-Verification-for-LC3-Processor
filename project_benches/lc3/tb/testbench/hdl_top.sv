@@ -12,7 +12,7 @@ module hdl_top;
     reset <= 0;
   end
 
-  imem_if imem_bus(.clock(clock), .reset(reset));
+  imem_if imem_bus(.clock(clock), .reset(reset), .pc(), .instrmem_rd(), .Instr_dout(), .complete_instr());
   wire [15:0] data_addr, data_din;
   wire data_rd;
   logic [15:0] data_dout;
@@ -28,8 +28,8 @@ module hdl_top;
   imem_monitor_bfm imem_mon(imem_bus.monitor_port);
   imem_driver_bfm imem_drv(imem_bus.responder_port);
 
-  fetch_in_if fetch_in_bus(.clock(clock), .reset(reset));
-  fetch_out_if fetch_out_bus(.clock(clock), .reset(reset));
+  fetch_in_if fetch_in_bus(.clock(clock), .reset(reset), .enable_updatePC(), .enable_fetch(), .br_taken(), .taddr());
+  fetch_out_if fetch_out_bus(.clock(clock), .reset(reset), .pc(), .npc_out(), .instrmem_rd());
   assign fetch_in_bus.enable_updatePC = dut.enable_updatePC;
   assign fetch_in_bus.enable_fetch = dut.enable_fetch;
   assign fetch_in_bus.br_taken = dut.br_taken;
@@ -100,8 +100,8 @@ module hdl_top;
   // Questa resolves virtual driver types even for classes never constructed.
   // Keep these compatibility instances on PRIVATE, disconnected buses. No
   // driver agent is active and none of these BFMs can drive DUT stage signals.
-  fetch_in_if unused_fetch_in_bus(.clock(clock), .reset(reset));
-  fetch_out_if unused_fetch_out_bus(.clock(clock), .reset(reset));
+  fetch_in_if unused_fetch_in_bus(.clock(clock), .reset(reset), .enable_updatePC(), .enable_fetch(), .br_taken(), .taddr());
+  fetch_out_if unused_fetch_out_bus(.clock(clock), .reset(reset), .pc(), .npc_out(), .instrmem_rd());
   decode_in_if unused_decode_in_bus(.clock(clock), .reset(reset));
   fetch_in_driver_bfm unused_fetch_in_drv(unused_fetch_in_bus.initiator_port);
   fetch_out_driver_bfm unused_fetch_out_drv(unused_fetch_out_bus.initiator_port);
