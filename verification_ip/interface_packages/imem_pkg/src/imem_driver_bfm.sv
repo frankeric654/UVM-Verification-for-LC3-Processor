@@ -146,6 +146,14 @@ interface imem_driver_bfm
 // pragma uvmf custom reset_condition_and_response end
 
   // pragma uvmf custom interface_item_additional begin
+  clocking request_cb @(posedge clock_i);
+    default input #1step;
+    input reset_i, pc_i, instrmem_rd_i, Instr_dout_i;
+  endclocking
+
+  realtime request_sample_time;
+  bit [15:0] request_addr;
+
   // pragma uvmf custom interface_item_additional end
 
   //******************************************************************
@@ -218,25 +226,13 @@ interface imem_driver_bfm
 // ****************************************************************************
 // LC3 instruction-memory RESPONDER (ECE 748 P3, Group 6, owner: Ziyao Lin)
 //
-// Protocol assumed from the instructor's controller_model/fetch_model (to be
-// confirmed on the LC3 RTL with waveforms):
-//  * Request : instrmem_rd == 1 during cycle k, fetch address on pc. Sampled at
-//              the falling edge (mid-cycle) so it never races the LC3's own
-//              rising-edge updates. 0 or Z on instrmem_rd means "no request".
-//  * Response: the word for that request is driven right after the next rising
-//              edge, so it is on Instr_dout for the whole of cycle k+1, with
-//              complete_instr == 1. Fixed one-cycle latency, no wait states;
-//              back-to-back requests get back-to-back responses.
-//  * Between requests (branch shadow, memory stall) Instr_dout and
-//              complete_instr HOLD. In the reference controller model a fetched
-//              word stays valid only while complete_instr stays 1
-//              (fe2_out_valid &= complete_instr), and the PC has already moved
-//              past that word.
-//  * Reset   : power-on reset only. Requests while reset is asserted are
-//              ignored, and no response is driven while reset is asserted.
-//              Reset values (reset_condition_and_response): Instr_dout = 16'h1020
-//              (ADD R0,R0,#0), complete_instr = 0. A reset in the middle of a
-//              test is outside the supported scope.
+// Integrated LC3 instruction-memory timing contract:
+// Requests are sampled before the rising edge using input #1step.
+// The selected response is driven after that same rising edge,
+// and is observable at the following rising-edge sample.
+// Sequence processing must not advance simulation time.
+// Data and completion remain stable between requests.
+// Power-on reset is supported; mid-test reset is not yet qualified.
 // ****************************************************************************
 bit first_transfer=1;
 
@@ -247,19 +243,28 @@ bit first_transfer=1;
        input imem_responder_s imem_responder_struct
        );// pragma tbx xtf
     if (!first_transfer) begin
-      // Complete the transfer captured by the previous call: the request was
-      // sampled in the middle of the cycle that ends at the next rising edge.
-      @(posedge clock_i);
+      // Respond after the request edge, without an extra clock delay.
+      if ($realtime != request_sample_time)
+        $fatal(1, "IMEM responder missed its response deadline");
+
       if (reset_i === 1'b0) begin
         Instr_dout_o     <= imem_responder_struct.instr;
         complete_instr_o <= 1'b1;
       end
     end
-    // Wait for the next request outside reset (sampled mid-cycle).
-    do @(negedge clock_i);
-    while ((reset_i !== 1'b0) || (instrmem_rd_i !== 1'b1));
-    imem_initiator_struct.addr  = pc_i;
-    imem_initiator_struct.instr = Instr_dout_i;   // word currently on the bus (informational only)
+
+    do @(request_cb);
+    while ((request_cb.reset_i !== 1'b0) ||
+           (request_cb.instrmem_rd_i !== 1'b1));
+
+    if ($isunknown(request_cb.pc_i))
+      $fatal(1, "IMEM request address contains X/Z");
+
+    request_sample_time = $realtime;
+    request_addr = request_cb.pc_i;
+
+    imem_initiator_struct.addr = request_cb.pc_i;
+    imem_initiator_struct.instr = request_cb.Instr_dout_i;
     first_transfer = 0;
   endtask
 // pragma uvmf custom respond_and_wait_for_next_transfer end
