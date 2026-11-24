@@ -3,18 +3,14 @@ interface control_out_monitor_bfm(control_out_if bus);
     timeprecision 1ps;
     control_out_pkg::control_out_monitor monitor;
     bit monitoring = 0;
-    logic reset_at_edge;
     longint unsigned cycle = 0;
 
     // Reset is synchronous. Capture the reset value seen by the DUT at the edge.
-    always @(posedge bus.clock) begin
-        reset_at_edge = bus.reset;
-        cycle++;
-    end
 
     // Clocking-block input skew avoids races with falling-edge stimulus.
-    clocking sample_cb @(negedge bus.clock);
+    clocking sample_cb @(posedge bus.clock);
         default input #1step;
+        input reset = bus.reset;
         input enable_updatePC = bus.enable_updatePC;
         input enable_fetch = bus.enable_fetch;
         input enable_decode = bus.enable_decode;
@@ -39,8 +35,9 @@ interface control_out_monitor_bfm(control_out_if bus);
 
     initial forever begin
         @(sample_cb);
+        cycle++;
         if (cycle != 0 && monitoring && monitor != null)
-            monitor.notify_transaction(cycle, reset_at_edge,
+            monitor.notify_transaction(cycle, sample_cb.reset,
                 sample_cb.enable_updatePC, sample_cb.enable_fetch, sample_cb.enable_decode, sample_cb.enable_execute, sample_cb.enable_writeback, sample_cb.bypass_alu_1, sample_cb.bypass_alu_2, sample_cb.bypass_mem_1, sample_cb.bypass_mem_2, sample_cb.mem_state, sample_cb.br_taken);
     end
 endinterface

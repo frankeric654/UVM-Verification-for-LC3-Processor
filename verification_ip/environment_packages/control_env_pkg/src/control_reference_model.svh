@@ -13,6 +13,7 @@ class control_reference_model extends uvm_object;
     } instruction_t;
 
     protected bit seen_reset;
+    protected bit startup_pending;
     protected bit fe1_valid, fe2_valid, dec_valid, exe_valid;
     protected memory_state_t memory_state;
 
@@ -42,7 +43,8 @@ class control_reference_model extends uvm_object;
         seen_reset = 1;
         // Reset establishes PC. The first post-reset edge starts Fetch 2.
         // Equivalent to the supplied model's initial Fetch-1 priming call.
-        fe1_valid = 1;
+        fe1_valid = 0;
+        startup_pending = 1;
         fe2_valid = 0;
         dec_valid = 0;
         exe_valid = 0;
@@ -118,7 +120,7 @@ class control_reference_model extends uvm_object;
         // The supplied function omits this completion qualification.
         p.enable_updatePC = !stalled &&
                             ((!has_branch && t.complete_instr) || branch_taken);
-        p.enable_fetch = !stalled && next_fe2;
+        p.enable_fetch = !stalled && (next_fe2 || startup_pending);
         p.enable_decode = !stalled && next_dec;
         p.enable_execute = !stalled && next_exe;
         p.enable_writeback = !stalled && exe_valid && executed.writes_dr;
@@ -136,6 +138,7 @@ class control_reference_model extends uvm_object;
                 p.bypass_alu_2 = !executed.memory_op;
             end
         end
+        startup_pending = 0;
         fe1_valid = next_fe1;
         fe2_valid = next_fe2;
         dec_valid = next_dec;
