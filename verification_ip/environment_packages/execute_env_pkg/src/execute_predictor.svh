@@ -214,6 +214,11 @@ class execute_predictor extends uvm_component;
 
     end
 
+    // Preserve four-state M_Data when the ALU bypass is disabled.
+    // The instructor model's bit arguments otherwise lose X/Z.
+    if (tx.sample.bypass_alu_2 === 1'b0)
+      expected_tx.sample.M_Data = tx.sample.VSR2;
+
     previous_aluout = expected_tx.sample.aluout;
 
     // Save the newly predicted output for the next cycle.
