@@ -19,6 +19,7 @@ class fetch_in_transaction_coverage  extends uvm_subscriber #(.T(fetch_in_transa
   `uvm_component_utils( fetch_in_transaction_coverage )
 
   T coverage_trans;
+  int unsigned sample_count = 0;
 
   // pragma uvmf custom class_item_additional begin
   // pragma uvmf custom class_item_additional end
@@ -63,6 +64,17 @@ class fetch_in_transaction_coverage  extends uvm_subscriber #(.T(fetch_in_transa
     `uvm_info("COV","Received transaction",UVM_HIGH);
     coverage_trans = t;
     fetch_in_transaction_cg.sample();
+    sample_count++;
+  endfunction
+
+
+  virtual function void report_phase(uvm_phase phase);
+    super.report_phase(phase);
+    `uvm_info("FETCH_COV",
+      $sformatf("fetch_in: samples=%0d coverage=%0.2f%%",
+        sample_count,
+        fetch_in_transaction_cg.get_inst_coverage()),
+      UVM_LOW)
   endfunction
 
 endclass
