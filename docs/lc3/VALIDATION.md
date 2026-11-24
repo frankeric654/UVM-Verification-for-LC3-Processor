@@ -1,3 +1,86 @@
+# LC3 integration validation - November 24, 2026
+
+Validated candidate: `5fa986e`.
+
+Tools: Questa 2025.1_1, UVM 1.2, UVMF 2023.4_2.
+Platform: NCSU Grendel.
+
+## Current results
+
+- Custom instruction coverage: 37960/37960.
+- Merged Fetch behavior coverage: 24/24.
+- Control branch-condition coverage: 24/24.
+- MemAccess transition coverage: 11/11.
+- Exhaustive Fetch scoreboard: 99895 matches, 0 mismatches.
+- IMEM protocol errors: 0.
+- All six stage scoreboards active.
+- Simulator errors: 0.
+- Simulator warnings: 118 per test.
+
+Strict regression in the delivery infrastructure experiment
+reported 13 Control errors in exhaustive and 4 in directed.
+Both tests completed and produced merged coverage.
+
+Characterization with experimental NOP handling enabled
+reported only the four known Control reset mismatches per test.
+
+The instruction stream digest remained 605597dd45b36595.
+
+These results are not final verification sign-off.
+
+## Validated changes
+
+- a731498: corrected MemAccess transition bins.
+- eec1287: independent Fetch timing audit.
+- 0c89539: regression artifact collection on functional failure,
+  coverage summary and external coverage binding.
+- 5fa986e: reject X/Z instruction read controls.
+
+The external bind probe achieved 2/2 coverage bins.
+Independent X and Z injections were detected by both monitors.
+Normal regression retained the previous functional results.
+
+The actual instructor-bound coverage model remains externally
+evaluated.
+
+## Runtime history
+
+| Experiment | Wall time |
+| --- | ---: |
+| Original unified infrastructure | 55.160 s |
+| MemAccess transition correction | 59.093 s |
+| Fetch contract audit | 58.123 s |
+| Strict delivery regression with bind | 59.464 s |
+| Delivery characterization | 55.595 s |
+| Fetch read-control correction | 66.495 s |
+
+These are individual measurements on a shared server,
+not controlled performance comparisons.
+
+## Remaining integration blockers
+
+- Control reset and zero-word NOP specification decisions.
+- Formal DMEM responder agent and sequence.
+- Final top-level environment and sequence integration.
+- Course RTL directory placement.
+- Strict regression after final integration.
+- Instructor-bound coverage evaluation.
+
+MemAccess transition conflicts have been resolved.
+MemAccess state-path coverage remains with its stage owner.
+
+The instructor canceled the separate test-plan requirement
+during the October 16 lecture. The submission requires a
+coverage summary rather than a detailed coverage report.
+
+See [README.md](README.md) for current build instructions.
+
+---
+
+## Historical infrastructure validation
+
+The following is retained as an earlier validation snapshot.
+
 # LC3 integration validation — November 24, 2026
 
 Validated infrastructure commit: `ce0b32c`.

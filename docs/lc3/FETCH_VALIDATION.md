@@ -54,3 +54,19 @@ Final DMEM integration and instructor-bound instruction
 coverage have not yet been qualified.
 
 This is characterization evidence, not final sign-off.
+
+## Subsequent read-control qualification
+
+Commit 5fa986e implements the instructor clarification that
+inactive instrmem_rd must be 0, not Z.
+
+Both Fetch and IMEM monitors reject X and Z before conversion.
+
+Independent X and Z fault injections were detected by both
+monitors at 105 ns.
+
+Normal exhaustive and directed characterization retained
+37960/37960 instruction coverage, 24/24 Fetch behavior bins
+and the original instruction-stream digest.
+
+Only the four known Control reset mismatches remained per test.

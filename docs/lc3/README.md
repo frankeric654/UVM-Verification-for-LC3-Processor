@@ -2,11 +2,12 @@
 
 [繁體中文](README_zh-TW.md)
 
-This branch adds the missing shared LC3 bench on top of team main `4ff9e12`.
-Both simulation tops and all six stage environments are implemented and have
-compiled and executed together with the supplied LC3 RTL. **The combined smoke
-run currently fails stage comparisons; this is an integration handoff, not a
-claim of passing processor verification or final project completion.**
+The shared LC3 environment compiles and runs all six stages.
+Custom instruction coverage and Fetch behavior coverage are closed.
+Known Control discrepancies and the missing formal DMEM responder
+prevent final strict sign-off.
+
+See [VALIDATION.md](VALIDATION.md) for measured results.
 
 ## Entry points
 
@@ -66,24 +67,87 @@ Replace it with the team's final dmem agent; do not drive both at once.
 
 ## Run
 
-Use authorized local copies of the instructor's eight RTL files (including
-`data_defs.v`) and a UVMF distribution. Neither is copied into this contribution.
-The checked-in `verification_ip/prediction_packages/lc3_prediction_pkg` is used.
-Questa UVM 1.2 headers and precompiled library must match.
+Use the course Questa installation and compatible UVMF.
 
-```bash
-module load questa/2024.2
-export LC3_RTL_DIR=/path/to/LC3_veloce_encrypted
-export UVMF_HOME=/path/to/UVMF_2023.3
-export QUESTA_HOME=/path/to/questasim
-python project_benches/lc3/sim/run.py --seed 1 --cycles 300
-```
+QUESTA_HOME can be discovered from vsim on PATH.
+UVMF_HOME can be discovered from a unique compatible installation
+under the Questa examples directory. Set it explicitly if ambiguous.
 
-CLI options `--rtl-dir`, `--uvmf-home`, `--questa-home` override those variables.
-Use `--compile-only` for compilation, or `--out /tmp/lc3-run` to put all compiled
-libraries/logs outside the checkout. Default output is the ignored `sim/build`.
-The runner selects `lc3_smoke_test` and loads both `hdl_top` and `hvl_top`.
-Simulator warnings about virtual interfaces containing interface ports are
-retained. A successful simulator process alone is not treated as a passing test.
+The runner prefers project_benches/lc3/rtl and falls back to
+project_benches/project3/rtl. LC3_RTL_DIR overrides both.
 
-See [VALIDATION.md](VALIDATION.md) for measured results and open failures.
+From the repository root:
+
+    cd project_benches/lc3/sim
+    make help
+    make compile
+    make baseline
+    make regress
+
+| Command | Purpose |
+| --- | --- |
+| make compile | Compile all sources |
+| make smoke | Strict single-seed smoke |
+| make smoke-regress | Strict multi-seed smoke |
+| make baseline | Known-issue baseline |
+| make regress | Strict full regression |
+| make characterize | Experimental full regression |
+| ./regress.sh | Strict full regression |
+| ./regress.sh --characterize | Characterization |
+
+Standalone regress.sh exit codes:
+
+- 0: strict PASS.
+- 1: regression FAIL.
+- 2: characterization completed, not sign-off.
+
+GNU Make can return 2 for different recipe failures.
+Always inspect regression_status.json and transcripts.
+
+## Regression artifacts
+
+Each run preserves test transcripts, individual UCDBs,
+merged.ucdb, coverage_summary.txt, coverage_details.txt,
+regression_status.json and timing information.
+
+Functional failures do not prevent later tests from running.
+Incomplete simulations cannot establish successful coverage.
+
+Only the coverage summary is intended for course submission.
+The detailed report remains available for internal bin checks.
+
+## External coverage binding
+
+The build accepts EXTRA_SV_SOURCES, EXTRA_VLOG_ARGS
+and EXTRA_VOPT_TOPS.
+
+From project_benches/lc3/sim:
+
+    export EXTRA_SV_SOURCES="$(realpath ../../../docs/lc3/ta_bind_probe.sv)"
+    export EXTRA_VLOG_ARGS="+define+LC3_TA_BIND_TEST"
+    export EXTRA_VOPT_TOPS="lc3_ta_bind_top"
+    ./regress.sh --characterize
+    unset EXTRA_SV_SOURCES EXTRA_VLOG_ARGS EXTRA_VOPT_TOPS
+
+The probe demonstrates external binding and is not included
+in the default regression.
+
+The instructor must supply the actual coverage source and top.
+
+## Submission packaging
+
+From the repository root:
+
+    bash scripts/package_p3.sh --check
+
+This checks the committed source archive without running Questa.
+
+After final integration:
+
+    bash scripts/package_p3.sh --final "$HOME/748/p3_submission"
+
+Final packaging requires the formal DMEM package, top-level
+sequence package, canonical RTL directory and strict regression PASS.
+
+The archive excludes generated compilation libraries,
+individual UCDBs and experimental build directories.
