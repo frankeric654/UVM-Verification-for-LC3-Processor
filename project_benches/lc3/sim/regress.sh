@@ -3,7 +3,7 @@ set -euo pipefail
 
 sim_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-exec python3 - "$sim_dir" "$@" <<'PY'
+exec "${LC3_PYTHON:-python3}" - "$sim_dir" "$@" <<'PY'
 from pathlib import Path
 import argparse
 import os
@@ -14,12 +14,25 @@ import tempfile
 import time
 
 start = time.perf_counter()
-sim = Path(sys.argv[1])
+sim = Path(sys.argv[1]).resolve()
+sys.path.insert(0, str(sim))
+from sim_checks import read_sim_summary
 repo = sim.parents[2]
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--characterize", action="store_true")
+ap.add_argument("--seed", type=int, default=1)
+ap.add_argument("--timeout", type=int,
+                default=os.getenv("LC3_TOOL_TIMEOUT", "300"))
+ap.add_argument("--out-root", type=Path, default=sim / "build")
 args = ap.parse_args(sys.argv[2:])
+
+if args.timeout <= 0 or args.seed <= 0:
+    ap.error("seed and timeout must be positive")
+
+for name in ("QUESTA_HOME", "UVMF_HOME"):
+    if not os.environ.get(name) or not Path(os.environ[name]).is_dir():
+        ap.error(f"{name} must point to an existing directory")
 
 questa = Path(os.environ["QUESTA_HOME"])
 rtl = Path(os.environ.get(
@@ -27,11 +40,12 @@ rtl = Path(os.environ.get(
     str(repo / "project_benches/project3/rtl")
 )).resolve()
 
-(sim / "build").mkdir(exist_ok=True)
+args.out_root = args.out_root.resolve()
+args.out_root.mkdir(parents=True, exist_ok=True)
 
 work = Path(tempfile.mkdtemp(
     prefix="regress.",
-    dir=sim / "build"
+    dir=args.out_root
 ))
 
 print("REGRESSION OUTPUT:", work, flush=True)
@@ -54,7 +68,8 @@ def run(label, command, logfile):
         result = subprocess.run(
             command, cwd=work,
             stdout=f, stderr=subprocess.STDOUT,
-            timeout=300
+            timeout=(2 * args.timeout + 10
+                     if label == "COMPILE" else args.timeout)
         )
 
     timings[label] = time.perf_counter() - t
@@ -73,17 +88,8 @@ def one(pattern, log):
 def validate(log, exhaustive):
     global known_issue
 
-    errors = int(one(r"^# UVM_ERROR\s*:\s*(\d+)$", log))
-    fatals = int(one(r"^# UVM_FATAL\s*:\s*(\d+)$", log))
-
+    errors, fatals = read_sim_summary(log)
     require(fatals == 0, "UVM fatal")
-    require(re.search(
-        r"^# Errors: 0, Warnings: \d+$", log, re.M
-    ), "Simulator errors or missing summary")
-
-    require(not re.search(
-        r"\*\* (?:Error|Fatal|Failure)\b", log
-    ), "Simulator error")
 
     if errors:
         require(args.characterize,
@@ -211,6 +217,7 @@ try:
         "--uvmf-home", os.environ["UVMF_HOME"],
         "--questa-home", str(questa),
         "--out", str(work),
+        "--timeout", str(args.timeout),
         "--compile-only"
     ], work / "build.log")
 
@@ -245,7 +252,7 @@ try:
             "-c", "-coverage", "-onfinish", "stop",
             "-L", str(questa / "uvm-1.2"),
             "lc3_compete_opt",
-            "-sv_seed", "1",
+            "-sv_seed", str(args.seed),
             f"+UVM_TESTNAME={test}",
             f"+LC3_CYCLES={cycles}",
             "+UVM_VERBOSITY=UVM_LOW",

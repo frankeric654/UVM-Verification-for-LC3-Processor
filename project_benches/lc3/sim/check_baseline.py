@@ -4,6 +4,7 @@
 import re
 import sys
 from pathlib import Path
+from sim_checks import read_sim_summary
 
 
 def require(condition, message):
@@ -25,40 +26,7 @@ def validate(run, rc):
         "Compilation failed or produced warnings"
     )
 
-    summaries = list(re.finditer(
-        r"^[ \t]*(?:#[ \t]*)?Errors:[ \t]*(\d+),"
-        r"[ \t]*Warnings:[ \t]*(\d+)"
-        r"(?:,[ \t]*Suppressed Errors:[ \t]*(\d+))?"
-        r"(?:,[ \t]*Suppressed Warnings:[ \t]*(\d+))?[ \t]*$",
-        log, re.MULTILINE
-    ))
-
-    require(summaries, "Missing simulator summary")
-
-    for summary in summaries:
-        require(
-            int(summary.group(1)) == 0,
-            "Simulator reported errors"
-        )
-        require(
-            int(summary.group(3) or 0) == 0,
-            "Simulator suppressed errors"
-        )
-
-    fatal_summary = re.search(
-        r"^# UVM_FATAL[ \t]*:[ \t]*\d+[ \t]*$",
-        log, re.MULTILINE
-    )
-
-    require(
-        fatal_summary and summaries[-1].start() > fatal_summary.end(),
-        "Missing final simulator summary"
-    )
-
-    require(
-        not re.search(r"(?m)^# \*\* (Error|Fatal)", log),
-        "Simulator error or assertion failure"
-    )
+    errors, fatals = read_sim_summary(log)
 
     responses = one(
         r"^# UVM_INFO .*"
@@ -66,8 +34,6 @@ def validate(run, rc):
     )
     require(int(responses) > 0, "No IMEM responses")
 
-    errors = int(one(r"^# UVM_ERROR\s*:\s*(\d+)$"))
-    fatals = int(one(r"^# UVM_FATAL\s*:\s*(\d+)$"))
 
     require(fatals == 0, "UVM fatal detected")
 

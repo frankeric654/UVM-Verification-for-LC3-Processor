@@ -13,22 +13,25 @@ OUT_ROOT ?= $(SIM_DIR)/build
 SEED ?= 1
 SEEDS ?= 1 2 3
 CYCLES ?= 300
+TOOL_TIMEOUT ?= 300
 
 RUN = "$(PYTHON)" "$(SIM_DIR)/run.py" \
       --rtl-dir "$(RTL_DIR)" \
       --uvmf-home "$(UVMF_HOME)" \
-      --questa-home "$(QUESTA_HOME)"
+      --questa-home "$(QUESTA_HOME)" --timeout "$(TOOL_TIMEOUT)"
 
-.PHONY: help compile smoke regress
+.PHONY: help compile smoke smoke-regress regress characterize
 
 help: ; @printf '%s\n' \
     "LC3 Verification Build" \
-    "make compile                 Compile all LC3 sources" \
-    "make smoke                   Run one smoke test" \
-    "make smoke SEED=2            Select a simulation seed" \
-    "make regress                 Run seeds 1, 2, 3" \
-    "make regress SEEDS='1 2 3'   Select regression seeds" \
-    "make smoke CYCLES=1000       Select simulation length"
+    "make compile          Compile all LC3 sources" \
+    "make smoke            Strict single-seed smoke" \
+    "make smoke-regress    Strict multi-seed smoke" \
+    "make baseline         Known-issue regression gate" \
+    "make regress          Strict full coverage regression" \
+    "make characterize     Experimental full regression" \
+    "Parameters: SEED, SEEDS, CYCLES, TOOL_TIMEOUT, RTL_DIR, OUT_ROOT"
+
 
 compile: ; @set -eu; \
     mkdir -p "$(OUT_ROOT)"; \
@@ -42,7 +45,7 @@ smoke: ; @set -eu; \
     echo "Run directory: $$out"; \
     $(RUN) --out "$$out" --seed "$(SEED)" --cycles "$(CYCLES)"
 
-regress: ; @set -eu; \
+smoke-regress: ; @set -eu; \
     test -n "$(strip $(SEEDS))"; \
     mkdir -p "$(OUT_ROOT)"; \
     root=$$(mktemp -d "$(OUT_ROOT)/regress.XXXXXX"); \
@@ -79,3 +82,10 @@ baseline: ; @set -eu; \
     done; \
     echo "Baseline logs: $$root"; \
     exit $$failed
+
+# Full regression has one implementation: regress.sh.
+COMPETITION = LC3_RTL_DIR="$(RTL_DIR)" LC3_PYTHON="$(PYTHON)" UVMF_HOME="$(UVMF_HOME)" QUESTA_HOME="$(QUESTA_HOME)" "$(SIM_DIR)/regress.sh" --seed "$(SEED)" --timeout "$(TOOL_TIMEOUT)" --out-root "$(OUT_ROOT)"
+
+regress: ; @$(COMPETITION)
+
+characterize: ; @$(COMPETITION) --characterize

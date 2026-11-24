@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from sim_checks import read_sim_summary
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
@@ -16,7 +17,12 @@ def main():
     ap.add_argument('--compile-only', action='store_true')
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--cycles', type=int, default=300)
+    ap.add_argument('--timeout', type=int,
+                    default=os.getenv('LC3_TOOL_TIMEOUT', '300'))
     args = ap.parse_args()
+    if args.timeout <= 0:
+        ap.error('--timeout must be positive')
+
     for key in ['rtl_dir', 'uvmf_home', 'questa_home']:
         val = getattr(args, key)
         if val is None or not val.is_dir():
@@ -64,7 +70,7 @@ def main():
     def run(tool, argv, log):
         with (out / log).open('w') as stream:
             result = subprocess.run([str(args.questa_home / 'bin' / tool), *map(str, argv)],
-                                    cwd=out, stdout=stream, stderr=subprocess.STDOUT, timeout=180)
+                                    cwd=out, stdout=stream, stderr=subprocess.STDOUT, timeout=args.timeout)
         print(tool, 'exit', result.returncode, 'log:', out / log, flush=True)
         if result.returncode:
             print((out / log).read_text()[-10000:])
@@ -73,15 +79,29 @@ def main():
     run('vlog', ['-sv', '-mfcu', '-timescale', '1ns/1ps', '-L', args.questa_home / 'uvm-1.2',
                 *['+incdir+' + str(x) for x in inc], *sources], 'compile.log')
     if args.compile_only: return
-    run('vsim', ['-c', '-L', args.questa_home / 'uvm-1.2', 'hdl_top', 'hvl_top',
+    run('vsim', ['-c', '-onfinish', 'stop', '-L', args.questa_home / 'uvm-1.2', 'hdl_top', 'hvl_top',
                  '-sv_seed', args.seed, '+UVM_TESTNAME=lc3_smoke_test',
                  '+LC3_CYCLES=' + str(args.cycles), '+UVM_VERBOSITY=UVM_LOW',
-                 '-do', 'onerror {quit -code 2}; run 100us; quit -code 0'], 'simulation.log')
+                 '-do', 'onerror {quit -code 2}; run -all; quit -code 0'], 'simulation.log')
     log = (out / 'simulation.log').read_text()
-    counts = [int(n) for n in re.findall(r'UVM_(?:ERROR|FATAL)\s*:\s*(\d+)', log)]
-    if 'LC3_SMOKE' not in log or len(counts) < 2 or any(counts) or re.search(r'\*\* (?:Error|Fatal)', log):
-        print('Simulation did not pass. Inspect simulation.log; errors are not suppressed.')
+    try:
+        errors, fatals = read_sim_summary(log)
+    except ValueError as exc:
+        print("Simulation validation failed:", exc)
         raise SystemExit(1)
+
+    completed = re.findall(
+        r"^# UVM_INFO .*?\[LC3_SMOKE\] Completed (\d+) clocks;"
+        r" imem responses=(\d+)[ \t]*$",
+        log, re.M
+    )
+
+    if (len(completed) != 1 or
+        int(completed[0][0]) != args.cycles or
+        int(completed[0][1]) == 0 or errors or fatals):
+        print("Simulation did not pass. Inspect simulation.log.")
+        raise SystemExit(1)
+
     print('LC3 smoke passed (not coverage closure).')
 
 if __name__ == '__main__':
