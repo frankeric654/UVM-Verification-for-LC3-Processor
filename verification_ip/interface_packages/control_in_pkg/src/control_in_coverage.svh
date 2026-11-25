@@ -75,4 +75,12 @@ class control_in_coverage extends uvm_subscriber #(control_in_transaction);
         sampled_cycles++;
         input_coverage.sample(t, use_sr1, use_sr2, writes_dr, load_producer);
     endfunction
+
+    virtual function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info("CONTROL_IN_COV",
+            $sformatf("Controller input functional coverage=%0.2f%%",
+                      input_coverage.get_inst_coverage()),
+            UVM_LOW)
+    endfunction
 endclass

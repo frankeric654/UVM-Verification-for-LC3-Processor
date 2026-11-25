@@ -8,6 +8,34 @@ class execute_coverage extends uvm_subscriber #(execute_in_transaction);
 
   // Number of transactions received and sampled.
   int unsigned sample_count;
+  logic [1:0] effective_address_wrap;
+
+  function automatic logic [1:0] calculate_address_wrap();
+    int signed base_address;
+    int signed signed_offset;
+    int signed full_address;
+    case (sample.IR[15:12])
+      4'h6, 4'h7: begin
+        if (sample.bypass_alu_1)
+          return 2'b11;
+        base_address = sample.bypass_mem_1
+          ? int'($unsigned(sample.Mem_Bypass_Val))
+          : int'($unsigned(sample.VSR1));
+        signed_offset = $signed(sample.IR[5:0]);
+      end
+      4'h2, 4'h3, 4'hA, 4'hB, 4'hE: begin
+        base_address = int'($unsigned(sample.npc));
+        signed_offset = $signed(sample.IR[8:0]);
+      end
+      default: return 2'b11;
+    endcase
+    full_address = base_address + signed_offset;
+    if (full_address < 0)
+      return 2'b10;
+    if (full_address > 16'hFFFF)
+      return 2'b01;
+    return 2'b00;
+  endfunction
 
   // Functional coverage for Execute stage inputs.
   covergroup execute_cg;
@@ -113,6 +141,47 @@ class execute_coverage extends uvm_subscriber #(execute_in_transaction);
 
     cross_alu_operand: cross cp_alu_opcode, cp_operand_type;
 
+    cp_base_register_value: coverpoint sample.VSR1 iff (
+      !sample.reset && sample.enable_execute &&
+      (sample.IR[15:12] inside {4'h6,4'h7})
+    ) {
+      bins zero = {16'h0000};
+      bins one = {16'h0001};
+      bins max_positive = {16'h7FFF};
+      bins min_negative = {16'h8000};
+      bins all_ones = {16'hFFFF};
+      bins code_region = {16'h3000};
+      bins other = default;
+    }
+
+    cp_base_opcode: coverpoint sample.IR[15:12] iff (
+      !sample.reset && sample.enable_execute &&
+      (sample.IR[15:12] inside {4'h6,4'h7})
+    ) {
+      bins ldr = {4'h6};
+      bins str = {4'h7};
+    }
+    cx_opcode_base_value: cross cp_base_opcode, cp_base_register_value;
+
+    cp_ea_opcode: coverpoint sample.IR[15:12] iff (
+      !sample.reset && sample.enable_execute &&
+      (sample.IR[15:12] inside {4'h2,4'h3,4'h6,4'h7,4'hA,4'hB,4'hE}) &&
+      !sample.bypass_alu_1
+    ) {
+      bins memory_address_ops[] = {4'h2,4'h3,4'h6,4'h7,4'hA,4'hB,4'hE};
+    }
+    cp_effective_address_wrap: coverpoint effective_address_wrap iff (
+      !sample.reset && sample.enable_execute &&
+      (sample.IR[15:12] inside {4'h2,4'h3,4'h6,4'h7,4'hA,4'hB,4'hE}) &&
+      !sample.bypass_alu_1
+    ) {
+      bins no_wrap = {2'b00};
+      bins wrap_high = {2'b01};
+      bins wrap_low = {2'b10};
+      ignore_bins unavailable = {2'b11};
+    }
+    cx_opcode_ea_wrap: cross cp_ea_opcode, cp_effective_address_wrap;
+
   endgroup
 
   function new(
@@ -134,6 +203,7 @@ class execute_coverage extends uvm_subscriber #(execute_in_transaction);
     end
 
     sample = t.sample;
+    effective_address_wrap = calculate_address_wrap();
 
     execute_cg.sample();
 

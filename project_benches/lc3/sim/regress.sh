@@ -121,7 +121,7 @@ def one(pattern, log):
     require(len(matches) == 1, f"Invalid summary: {pattern}")
     return matches[0]
 
-def validate(log, exhaustive):
+def validate(log, test_kind):
     global known_issue
 
     errors, fatals = read_sim_summary(log)
@@ -210,7 +210,7 @@ def validate(log, exhaustive):
     require(e == a == c == m + bad and m > 0 and bad == errors,
             "Control accounting")
 
-    if exhaustive:
+    if test_kind == "exhaustive":
         require(re.search(
             r"\[LC3_ENUM_DONE\] expected=37960 delivered=37960 "
             r"passes=1 observed=\d+ protocol_errors=0 "
@@ -221,11 +221,16 @@ def validate(log, exhaustive):
             "instruction field combinations hit: 37960 of 37960" in log,
             "Instruction coverage incomplete"
         )
-    else:
+    elif test_kind == "directed":
         require("Delivered=148 Expected=148" in log,
                 "Directed stimulus incomplete")
         require("Completed 300 clocks" in log,
                 "Directed test did not finish")
+    else:
+        require("Delivered=198 Expected=198" in log,
+                "Controller-target stimulus incomplete")
+        require("Completed 5000 clocks" in log,
+                "Controller-target test did not finish")
 
     if errors:
         print("CHECKING: KNOWN_ISSUE" if args.characterize
@@ -237,6 +242,7 @@ def validate(log, exhaustive):
         if any(k in line for k in (
             "[LC3_ENUM_DONE] expected=",
             "[FETCH_DIRECTED_DONE] Delivered=",
+            "[LC3_CONTROLLER_TARGET_DONE] Delivered=",
             "[IMEM_COV] instruction",
             "[FETCH_TARGET_COV] fetch",
             "[CONTROL_SCOREBOARD] expected=",
@@ -279,11 +285,15 @@ try:
     databases = []
 
     tests = [
-        ("exhaustive", "lc3_exhaustive_test", 500000),
-        ("directed", "lc3_fetch_target_test", 300)
+        ("exhaustive", "lc3_exhaustive_test", 500000, ()),
+        ("directed", "lc3_fetch_target_test", 300, ()),
+        ("controller", "lc3_controller_target_test", 5000, (
+            "+LC3_DMEM_DELAY_SWEEP",
+            "+LC3_DMEM_COVERAGE_INIT"
+        ))
     ]
 
-    for label, test, cycles in tests:
+    for label, test, cycles, extra_args in tests:
         out = work / label
         out.mkdir()
 
@@ -299,11 +309,10 @@ try:
             f"+UVM_TESTNAME={test}",
             f"+LC3_CYCLES={cycles}",
             "+UVM_VERBOSITY=UVM_LOW",
-            "+LC3_QUIET_DECODE"
+            "+LC3_QUIET_DECODE",
+            "+LC3_CONTROL_ZERO_NOP",
+            *extra_args
         ]
-
-        if args.characterize:
-            cmd.append("+LC3_CONTROL_ZERO_NOP")
 
         cmd += [
             "-do",
@@ -335,6 +344,11 @@ try:
             # only after a normal, completed simulation.
             if label == "exhaustive":
                 marker = r"^# UVM_INFO .*\[LC3_ENUM_DONE\] expected="
+            elif label == "controller":
+                marker = (
+                    r"^# UVM_INFO .*\[LC3_SMOKE\] "
+                    r"Completed 5000 clocks;"
+                )
             else:
                 marker = (
                     r"^# UVM_INFO .*\[LC3_SMOKE\] "
@@ -356,7 +370,7 @@ try:
             databases.append(ucdb)
             record["ucdb_included"] = True
 
-            validate(log, label == "exhaustive")
+            validate(log, label)
 
             record["status"] = (
                 "KNOWN_ISSUE" if errors else "PASS"

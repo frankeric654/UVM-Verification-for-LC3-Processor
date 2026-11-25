@@ -136,5 +136,13 @@ class decode_in_coverage extends uvm_subscriber #(decode_in_transaction);
         coverage_trans = t;
         cg_decode_in_ISA.sample();
     endfunction : write
+
+    virtual function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info("DECODE_IN_COV",
+            $sformatf("Decode input functional coverage=%0.2f%%",
+                      cg_decode_in_ISA.get_inst_coverage()),
+            UVM_LOW)
+    endfunction : report_phase
     
 endclass : decode_in_coverage

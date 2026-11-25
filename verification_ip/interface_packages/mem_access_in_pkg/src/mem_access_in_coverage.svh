@@ -193,4 +193,12 @@ class mem_access_in_coverage extends uvm_subscriber #(mem_access_in_transaction)
         sequence_started = 1;
         cg_mem_access_in.sample();
     endfunction
+
+    virtual function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info("MEM_ACCESS_IN_COV",
+            $sformatf("MemAccess inputs functional coverage=%0.2f%%",
+                      cg_mem_access_in.get_inst_coverage()),
+            UVM_LOW)
+    endfunction
 endclass : mem_access_in_coverage

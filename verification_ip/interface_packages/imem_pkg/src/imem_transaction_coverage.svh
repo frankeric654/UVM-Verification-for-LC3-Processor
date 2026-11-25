@@ -26,6 +26,22 @@ class imem_transaction_coverage  extends uvm_subscriber #(.T(imem_transaction ))
     return (coverage_trans.instr[15:12] == op);
   endfunction
 
+  function bit op_is_memory();
+    return coverage_trans.instr[15:12] inside {
+      IMEM_LD, IMEM_LDR, IMEM_LDI, IMEM_LEA,
+      IMEM_ST, IMEM_STR, IMEM_STI
+    };
+  endfunction
+
+  function bit op_is_pc_relative_memory();
+    return coverage_trans.instr[15:12] inside {
+      IMEM_LD, IMEM_LDI, IMEM_LEA, IMEM_ST, IMEM_STI
+    };
+  endfunction
+
+  bit previous_mem_instr_valid;
+  bit [8:0] previous_mem_offset;
+
   // Field combinations per instruction family (cross bins of the model below).
   localparam int unsigned ALU_COMBOS  = 9280;    // ADD 2560 + AND 2560 + NOT 64 + LEA 4096
   localparam int unsigned MEM_COMBOS  = 24576;   // LD, LDI, LDR, ST, STI, STR: 4096 each
@@ -85,6 +101,18 @@ class imem_transaction_coverage  extends uvm_subscriber #(.T(imem_transaction ))
     `uvm_info("IMEM_COV", $sformatf("instruction field combinations hit: %0d of 37960 (ALU %0d/%0d, MEM %0d/%0d, CONTROL %0d/%0d); covergroup %0.2f%%",
                                     combinations_hit(), alu_hits(), ALU_COMBOS, mem_hits(), MEM_COMBOS,
                                     ctrl_hits(), CTRL_COMBOS, imem_transaction_cg.get_inst_coverage()), UVM_LOW)
+    report_memory_instruction_coverage();
+  endfunction
+
+  function void report_memory_instruction_coverage();
+    `uvm_info("MEM_INSTR_COV",
+      $sformatf("Memory instruction target coverage=%0.2f%%",
+        mem_instr_cg.get_inst_coverage()),
+      UVM_LOW)
+    `uvm_info("MEM_OFFSET_TOGGLE_COV",
+      $sformatf("Memory offset transition coverage=%0.2f%%",
+        mem_offset_toggle_cg.get_inst_coverage()),
+      UVM_LOW)
   endfunction
   // pragma uvmf custom class_item_additional end
   
@@ -187,6 +215,103 @@ class imem_transaction_coverage  extends uvm_subscriber #(.T(imem_transaction ))
     // pragma uvmf custom covergroup end
   endgroup
 
+  covergroup mem_instr_cg;
+    option.per_instance = 1;
+    option.auto_bin_max = 64;
+
+    cp_opcode : coverpoint coverage_trans.instr[15:12] {
+      bins ld = {IMEM_LD};
+      bins ldr = {IMEM_LDR};
+      bins ldi = {IMEM_LDI};
+      bins lea = {IMEM_LEA};
+      bins st = {IMEM_ST};
+      bins str = {IMEM_STR};
+      bins sti = {IMEM_STI};
+      bins non_mem = {IMEM_BR, IMEM_ADD, IMEM_AND, IMEM_NOT, IMEM_JMP};
+      illegal_bins unsupported = {4'h4, 4'h8, 4'hD, 4'hF};
+    }
+
+    cp_reg_dr_sr : coverpoint coverage_trans.instr[11:9]
+      iff (op_is_memory()) {
+        bins registers[] = {[0:7]};
+    }
+    cp_baser : coverpoint coverage_trans.instr[8:6]
+      iff (coverage_trans.instr[15:12] inside {IMEM_LDR, IMEM_STR}) {
+        bins registers[] = {[0:7]};
+    }
+    cp_pcoffset9 : coverpoint coverage_trans.instr[8:0]
+      iff (op_is_pc_relative_memory()) {
+        bins zero = {9'h000};
+        bins plus_one = {9'h001};
+        bins plus_two_to_fifteen = {[9'h002:9'h00F]};
+        bins plus_sixteen_to_254 = {[9'h010:9'h0FE]};
+        bins plus_max = {9'h0FF};
+        bins minus_min = {9'h100};
+        bins minus_255_to_16 = {[9'h101:9'h1F0]};
+        bins minus_15_to_2 = {[9'h1F1:9'h1FE]};
+        bins minus_one = {9'h1FF};
+    }
+    cp_pcoffset6 : coverpoint coverage_trans.instr[5:0]
+      iff (coverage_trans.instr[15:12] inside {IMEM_LDR, IMEM_STR}) {
+        bins zero = {6'h00};
+        bins plus_one = {6'h01};
+        bins plus_two_to_30 = {[6'h02:6'h1E]};
+        bins plus_max = {6'h1F};
+        bins minus_min = {6'h20};
+        bins minus_31_to_2 = {[6'h21:6'h3E]};
+        bins minus_one = {6'h3F};
+    }
+    cp_register_overlap : coverpoint
+      (coverage_trans.instr[11:9] == coverage_trans.instr[8:6])
+      iff (coverage_trans.instr[15:12] inside {IMEM_LDR, IMEM_STR}) {
+        bins different_registers = {0};
+        bins same_register = {1};
+    }
+
+    cx_opcode_dr_sr : cross cp_opcode, cp_reg_dr_sr iff (op_is_memory());
+    cx_opcode_baser : cross cp_opcode, cp_baser
+      iff (coverage_trans.instr[15:12] inside {IMEM_LDR, IMEM_STR});
+    cx_opcode_pcoffset9 : cross cp_opcode, cp_pcoffset9
+      iff (op_is_pc_relative_memory());
+    cx_opcode_pcoffset6 : cross cp_opcode, cp_pcoffset6
+      iff (coverage_trans.instr[15:12] inside {IMEM_LDR, IMEM_STR});
+    cx_opcode_reg_overlap : cross cp_opcode, cp_register_overlap
+      iff (coverage_trans.instr[15:12] inside {IMEM_LDR, IMEM_STR});
+  endgroup
+
+  covergroup mem_offset_toggle_cg with function sample(
+    bit [8:0] previous_offset, bit [8:0] current_offset
+  );
+    option.per_instance = 1;
+    cp_offset_bit0 : coverpoint {previous_offset[0], current_offset[0]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit1 : coverpoint {previous_offset[1], current_offset[1]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit2 : coverpoint {previous_offset[2], current_offset[2]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit3 : coverpoint {previous_offset[3], current_offset[3]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit4 : coverpoint {previous_offset[4], current_offset[4]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit5 : coverpoint {previous_offset[5], current_offset[5]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit6 : coverpoint {previous_offset[6], current_offset[6]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit7 : coverpoint {previous_offset[7], current_offset[7]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+    cp_offset_bit8 : coverpoint {previous_offset[8], current_offset[8]} {
+      bins zero_to_one = {2'b01}; bins one_to_zero = {2'b10};
+    }
+  endgroup
+
   // ****************************************************************************
   // FUNCTION : new()
   // This function is the standard SystemVerilog constructor.
@@ -194,6 +319,8 @@ class imem_transaction_coverage  extends uvm_subscriber #(.T(imem_transaction ))
   function new(string name="", uvm_component parent=null);
     super.new(name,parent);
     imem_transaction_cg=new;
+    mem_instr_cg=new;
+    mem_offset_toggle_cg=new;
   endfunction
 
   // ****************************************************************************
@@ -214,6 +341,13 @@ class imem_transaction_coverage  extends uvm_subscriber #(.T(imem_transaction ))
     `uvm_info("COV","Received transaction",UVM_HIGH);
     coverage_trans = t;
     imem_transaction_cg.sample();
+    mem_instr_cg.sample();
+    if (op_is_memory()) begin
+      if (previous_mem_instr_valid)
+        mem_offset_toggle_cg.sample(previous_mem_offset, t.instr[8:0]);
+      previous_mem_offset = t.instr[8:0];
+      previous_mem_instr_valid = 1;
+    end
   endfunction
 
 endclass

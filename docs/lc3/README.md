@@ -61,6 +61,13 @@ The model implements 65,536 16-bit words, initially zero. Stores update memory;
 loads return its contents. It observes `mem_state` and address/read/write pins,
 responds on falling edges, and produces a completion pulse with a response gap.
 Read data is held between responses so indirect operations can use the pointer.
+The full regression also runs a directed controller/memory target test that
+exercises LDI/STI, branches, dependencies, representative data patterns, and
+representative 0, 1, 2, 3, 6, and 10-cycle data-memory response delays.
+It explicitly enables the zero-word NOP compatibility profile in the controller
+reference model; cycle-by-cycle comparisons remain enabled. This profile still
+needs a licensed regression rerun for confirmation. The reset `enable_fetch`
+difference remains a known spec/RTL discrepancy.
 Reset clears handshake outputs, not the array. This is **not a dmem UVM agent**,
 and has not been independently validated for every LC3 protocol scenario.
 Replace it with the team's final dmem agent; do not drive both at once.

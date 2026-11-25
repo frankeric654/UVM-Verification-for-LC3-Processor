@@ -22,6 +22,30 @@ module hdl_top;
     .complete_instr(imem_bus.complete_instr), .Data_addr(data_addr),
     .Data_din(data_din), .Data_rd(data_rd), .Data_dout(data_dout),
     .complete_data(complete_data));
+  mem_access_assertions mem_access_checks (
+    .clock(clock),
+    .reset(reset),
+    .complete_data(complete_data),
+    .mem_state(dut.mem_state),
+    .IR_Exec(dut.IR_Exec),
+    .M_Control(dut.Mem_Control_out),
+    .M_Data(dut.M_Data),
+    .M_Addr(dut.pcout),
+    .Data_dout(data_dout),
+    .Data_addr(data_addr),
+    .Data_din(data_din),
+    .Data_rd(data_rd),
+    .memout(dut.memout),
+    .enable_updatePC(dut.enable_updatePC),
+    .enable_fetch(dut.enable_fetch),
+    .enable_decode(dut.enable_decode),
+    .enable_execute(dut.enable_execute),
+    .enable_writeback(dut.enable_writeback),
+    .bypass_alu_1(dut.bypass_alu_1),
+    .bypass_alu_2(dut.bypass_alu_2),
+    .bypass_mem_1(dut.bypass_mem_1),
+    .bypass_mem_2(dut.bypass_mem_2)
+  );
   lc3_dmem_model dmem(.clock(clock), .reset(reset), .mem_state(dut.mem_state),
     .addr(data_addr), .din(data_din), .rd(data_rd),
     .dout(data_dout), .complete(complete_data));

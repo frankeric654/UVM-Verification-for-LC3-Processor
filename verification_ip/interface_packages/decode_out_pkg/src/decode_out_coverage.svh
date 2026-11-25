@@ -70,4 +70,12 @@ class decode_out_coverage extends uvm_subscriber #(decode_out_transaction);
         cg_decode_out.sample();
     endfunction : write
 
+    virtual function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info("DECODE_OUT_COV",
+            $sformatf("Decode output functional coverage=%0.2f%%",
+                      cg_decode_out.get_inst_coverage()),
+            UVM_LOW)
+    endfunction : report_phase
+
 endclass : decode_out_coverage

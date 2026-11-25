@@ -30,8 +30,7 @@ class control_reference_model extends uvm_object;
         d.opcode = ir[15:12];
         d.supported = d.opcode inside {0,1,2,3,5,6,7,9,10,11,12,14};
         d.control_op = d.opcode inside {0,12};
-        // Experimental RTL compatibility hypothesis.
-        // Strict instructor-model behavior remains the default.
+        // Optional zero-word NOP profile for controller regression.
         if (zero_word_nop && ir === 16'h0000)
             d.control_op = 0;
         d.memory_op = d.opcode inside {2,3,6,7,10,11};
@@ -128,9 +127,7 @@ class control_reference_model extends uvm_object;
                             ((!has_branch && t.complete_instr) || branch_taken);
         p.enable_fetch = !stalled && (next_fe2 || startup_pending);
         p.enable_decode = !stalled && next_dec;
-        // Experimental compatibility behavior:
-        // A zero-word NOP does not activate Execute.
-        // Preserve internal pipeline validity tracking.
+        // Preserve pipeline validity while treating the zero word as an inert NOP.
         p.enable_execute = !stalled && next_exe &&
                            !(zero_word_nop &&
                              (t.IR === 16'h0000));

@@ -75,6 +75,7 @@ def main():
     sources.append(tests / 'lc3_test_pkg.sv')
     sources += [args.rtl_dir / f for f in ['Fetch.v', 'Decode_Pipelined.v', 'Execute.v',
                 'Mem_Access.v', 'WriteBack.v', 'Controller_Pipeline.v', 'TopLevelLC3.v']]
+    sources.append(vip / 'interface_packages/mem_access_out_pkg/src/mem_access_assertions.sv')
     top = root / 'project_benches/lc3/tb/testbench'
     sources += [top / 'lc3_dmem_model.sv', top / 'hdl_top.sv', top / 'hvl_top.sv']
     sources += additional_sources

@@ -15,11 +15,16 @@ class control_out_coverage extends uvm_subscriber #(control_out_transaction);
             bins start_read = (3 => 0);
             bins start_write = (3 => 2);
             bins start_indirect = (3 => 1);
+            bins idle_wait = (3 => 3);
+            bins read_wait = (0 => 0);
+            bins indirect_wait = (1 => 1);
+            bins write_wait = (2 => 2);
             bins pointer_to_read = (1 => 0);
             bins pointer_to_write = (1 => 2);
             bins read_done = (0 => 3);
             bins write_done = (2 => 3);
-            bins waiting[] = (0 => 0), (1 => 1), (2 => 2);
+            illegal_bins illegal_transitions =
+                (0 => 1), (0 => 2), (1 => 3), (2 => 0), (2 => 1);
         }
         cp_alu_1: coverpoint t.bypass_alu_1 iff (!t.reset);
         cp_alu_2: coverpoint t.bypass_alu_2 iff (!t.reset);
@@ -39,5 +44,13 @@ class control_out_coverage extends uvm_subscriber #(control_out_transaction);
     virtual function void write(control_out_transaction t);
         sampled_cycles++;
         output_coverage.sample(t);
+    endfunction
+
+    virtual function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info("CONTROL_OUT_COV",
+            $sformatf("Controller output functional coverage=%0.2f%%",
+                      output_coverage.get_inst_coverage()),
+            UVM_LOW)
     endfunction
 endclass
